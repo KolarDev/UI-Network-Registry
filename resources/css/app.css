@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ui-blue: #2856C3;   /* Official UI Indigo/Cerulean Blue */
+  --color-ui-gold: #7E711F;   /* Official UI Pacifika Gold */
+  --color-ui-dark: #1A212C;   /* UI Mirage dark slate for typography */
+  
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", ui-serif, Georgia, serif;
+}
