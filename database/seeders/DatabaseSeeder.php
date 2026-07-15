@@ -15,11 +15,13 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        // Seed default administrator account (admin / admin123)
+        User::create([
+            'username' => 'admin',
+            'password' => \Illuminate\Support\Facades\Hash::make('admin123'),
         ]);
+
+        // Seed 25 fake staff registrations for testing UI pagination
+        \App\Models\StaffRegistration::factory(25)->create();
     }
 }

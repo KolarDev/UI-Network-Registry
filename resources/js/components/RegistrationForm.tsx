@@ -294,6 +294,7 @@ export default function RegistrationForm() {
         if (!validateStep(3)) return;
 
         setIsSubmitting(true);
+        setErrors({});
 
         try {
             const submissionData = new FormData();
@@ -315,35 +316,65 @@ export default function RegistrationForm() {
                 submissionData.append('payslipFile', formData.payslipFile);
             }
 
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-
-            console.log('--- Submitting Registration FormData ---');
-            for (let pair of submissionData.entries()) {
-                if (pair[1] instanceof File) {
-                    console.log(`${pair[0]}: File [name: ${pair[1].name}, size: ${pair[1].size}B, type: ${pair[1].type}]`);
-                } else {
-                    console.log(`${pair[0]}: ${pair[1]}`);
-                }
-            }
-
-            const mockRef = `UI-NET-${Math.floor(100000 + Math.random() * 900000)}`;
-            setSubmissionResult({
-                success: true,
-                reference: mockRef,
-                message: 'Your registration was completed successfully! The IT Network Unit will review your uploaded documents.',
-                sentData: {
-                    fullName: formData.fullName,
-                    username: formData.username,
-                    staffId: formData.staffId,
-                    faculty: formData.faculty,
-                    department: formData.department,
+            const response = await fetch('/api/register', {
+                method: 'POST',
+                body: submissionData,
+                headers: {
+                    'Accept': 'application/json',
                 }
             });
-            setCurrentStep(5);
-        } catch (err) {
+
+            const result = await response.json();
+
+            if (response.ok && result.success) {
+                setSubmissionResult({
+                    success: true,
+                    reference: result.reference,
+                    message: result.message,
+                    sentData: result.sentData,
+                });
+                setCurrentStep(5);
+            } else {
+                if (result.errors) {
+                    const validationErrors: ValidationErrors = {};
+                    Object.keys(result.errors).forEach((key) => {
+                        const messages = result.errors[key];
+                        validationErrors[key as keyof ValidationErrors] = Array.isArray(messages) ? messages[0] : messages;
+                    });
+                    setErrors(validationErrors);
+
+                    // Redirect back to the step with errors
+                    if (
+                        validationErrors.fullName ||
+                        validationErrors.staffId ||
+                        validationErrors.designation ||
+                        validationErrors.phone ||
+                        validationErrors.faculty ||
+                        validationErrors.department
+                    ) {
+                        setCurrentStep(1);
+                    } else if (
+                        validationErrors.username ||
+                        validationErrors.password ||
+                        validationErrors.passwordConfirmation
+                    ) {
+                        setCurrentStep(2);
+                    } else {
+                        setCurrentStep(3);
+                    }
+                    
+                    setSubmissionResult({
+                        success: false,
+                        message: 'Validation failed. Please correct the highlighted errors.',
+                    });
+                } else {
+                    throw new Error(result.message || 'A network error occurred while submitting your registration.');
+                }
+            }
+        } catch (err: any) {
             setSubmissionResult({
                 success: false,
-                message: 'A network error occurred while submitting your registration. Please try again.',
+                message: err.message || 'A network error occurred while submitting your registration. Please try again.',
             });
         } finally {
             setIsSubmitting(false);
@@ -373,47 +404,40 @@ export default function RegistrationForm() {
     const pwdStrength = getPasswordStrength(formData.password);
 
     return (
-        <div className="w-full max-w-4xl bg-white border border-slate-200/80 rounded-3xl shadow-xl overflow-hidden relative">
+        <div className="w-full max-w-4xl bg-white border border-slate-300 rounded-xl shadow-md overflow-hidden relative">
             
-            {/* Glowing Accent Orbs */}
-            <div className="absolute -top-32 -left-32 w-64 h-64 bg-ui-blue/5 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-32 -right-32 w-64 h-64 bg-ui-gold/5 rounded-full blur-3xl pointer-events-none" />
-
             {/* Portal Header */}
-            <div className="relative border-b border-slate-100 bg-slate-50/60 p-6 sm:p-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="relative border-b border-slate-200 bg-[#2856C3] text-white p-6 sm:p-8 flex flex-col sm:flex-row justify-between items-center gap-4">
                 <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 bg-gradient-to-br from-ui-blue to-blue-800 rounded-2xl flex items-center justify-center shadow-md border border-ui-blue/20">
-                        <svg className="w-8 h-8 text-ui-gold" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-                            <path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5" />
-                        </svg>
+                    <div className="w-16 h-16 md:w-20 md:h-20 flex-shrink-0 flex items-center justify-center">
+                        <img src="/images/ui-logo.jpg" alt="University of Ibadan Logo" className="w-full h-full object-contain" />
                     </div>
                     <div>
-                        <h2 className="text-xl sm:text-2xl font-bold font-serif text-slate-800 tracking-wide">
+                        <h2 className="text-xl sm:text-2xl font-bold font-serif text-white tracking-wide">
                             UNIVERSITY OF IBADAN
                         </h2>
-                        <p className="text-xs font-semibold text-ui-gold uppercase tracking-widest mt-0.5">
+                        <p className="text-xs font-bold text-ui-gold uppercase tracking-wider mt-0.5">
                             Information Technology & Media Services
                         </p>
                     </div>
                 </div>
                 <div className="flex flex-col items-end text-right">
-                    <span className="px-3 py-1 bg-ui-blue/5 border border-ui-blue/20 text-ui-blue rounded-full text-xs font-semibold tracking-wider uppercase">
+                    <span className="px-3 py-1 bg-white border border-slate-200 text-[#2856C3] rounded-md text-xs font-bold tracking-wider uppercase">
                         ITNH Network Registry
                     </span>
-                    <span className="text-[10px] text-slate-400 mt-1">Form: UI/ITMS/NET/STF-01</span>
+                    <span className="text-[10px] text-slate-100 font-bold mt-1">Form: UI/ITMS/NET/STF-01</span>
                 </div>
             </div>
 
             {/* Step Wizard Progress Bar */}
             {currentStep <= 4 && (
-                <div className="px-6 sm:px-12 pt-8 pb-4 bg-slate-50/40 relative border-b border-slate-100">
+                <div className="px-6 sm:px-12 pt-8 pb-4 bg-slate-50 relative border-b border-slate-200">
                     <div className="flex justify-between items-center relative">
                         {/* Progress Background Line */}
-                        <div className="absolute top-1/2 left-0 right-0 h-1 bg-slate-200 -translate-y-1/2 rounded-full z-0" />
+                        <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-slate-300 -translate-y-1/2 z-0" />
                         {/* Active Progress Line */}
                         <div 
-                            className="absolute top-1/2 left-0 h-1 bg-gradient-to-r from-ui-blue to-ui-gold -translate-y-1/2 rounded-full z-0 transition-all duration-500 ease-in-out" 
+                            className="absolute top-1/2 left-0 h-0.5 bg-ui-blue -translate-y-1/2 z-0 transition-all duration-500 ease-in-out" 
                             style={{ width: `${((currentStep - 1) / 3) * 100}%` }}
                         />
 
@@ -436,10 +460,10 @@ export default function RegistrationForm() {
                                         disabled={s.step > currentStep}
                                         className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 border-2 ${
                                             isCompleted
-                                                ? 'bg-ui-blue border-ui-blue text-white shadow-md'
+                                                ? 'bg-ui-blue border-ui-blue text-white shadow-sm'
                                                 : isActive
-                                                ? 'bg-white border-ui-gold text-ui-gold ring-4 ring-ui-gold/15 scale-110'
-                                                : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                                                ? 'bg-white border-ui-gold text-ui-gold scale-110'
+                                                : 'bg-slate-100 border-slate-300 text-slate-600 cursor-not-allowed'
                                         }`}
                                     >
                                         {isCompleted ? (
@@ -450,10 +474,10 @@ export default function RegistrationForm() {
                                             s.step
                                         )}
                                     </button>
-                                    <span className={`text-xs font-bold mt-2 tracking-wide hidden sm:block ${isActive ? 'text-ui-gold' : isCompleted ? 'text-ui-blue' : 'text-slate-400'}`}>
+                                    <span className={`text-xs font-bold mt-2 tracking-wide hidden sm:block ${isActive ? 'text-ui-gold' : isCompleted ? 'text-ui-blue' : 'text-slate-700'}`}>
                                         {s.label}
                                     </span>
-                                    <span className="text-[10px] text-slate-400 hidden md:block mt-0.5 font-medium">
+                                    <span className="text-[10px] text-slate-650 hidden md:block mt-0.5 font-bold">
                                         {s.desc}
                                     </span>
                                 </div>
@@ -468,10 +492,10 @@ export default function RegistrationForm() {
                 {currentStep === 1 && (
                     <div className="space-y-6 animate-fadeIn">
                         <div>
-                            <h3 className="text-lg sm:text-xl font-bold text-slate-800 flex items-center gap-2">
+                            <h3 className="text-lg sm:text-xl font-bold text-slate-900 flex items-center gap-2">
                                 <span className="text-ui-gold font-serif">I.</span> Personal Data Section
                             </h3>
-                            <p className="text-slate-500 text-sm mt-1">Please enter your official university staff records.</p>
+                            <p className="text-slate-700 text-sm mt-1">Please enter your official university staff records.</p>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -490,7 +514,7 @@ export default function RegistrationForm() {
                                         className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 transition-all duration-200 ${
                                             errors.fullName 
                                                 ? 'border-red-500 focus:ring-red-500/10' 
-                                                : 'border-slate-200 focus:border-ui-blue focus:ring-ui-blue/10'
+                                                : 'border-slate-200 focus:border-[#2856C3] focus:ring-[#2856C3]'
                                         }`}
                                         placeholder="e.g. Prof. Olusola Babalola"
                                     />
@@ -515,7 +539,7 @@ export default function RegistrationForm() {
                                         className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 transition-all duration-200 uppercase tracking-widest ${
                                             errors.staffId 
                                                 ? 'border-red-500 focus:ring-red-500/10' 
-                                                : 'border-slate-200 focus:border-ui-blue focus:ring-ui-blue/10'
+                                                : 'border-slate-200 focus:border-[#2856C3] focus:ring-[#2856C3]'
                                         }`}
                                         placeholder="UI/STF/1234"
                                     />
@@ -540,7 +564,7 @@ export default function RegistrationForm() {
                                         className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-slate-800 focus:outline-none focus:bg-white focus:ring-2 transition-all duration-200 appearance-none ${
                                             errors.designation 
                                                 ? 'border-red-500 focus:ring-red-500/10' 
-                                                : 'border-slate-200 focus:border-ui-blue focus:ring-ui-blue/10'
+                                                : 'border-slate-200 focus:border-[#2856C3] focus:ring-[#2856C3]'
                                         }`}
                                     >
                                         <option value="" className="text-slate-450">Select Designation</option>
@@ -573,7 +597,7 @@ export default function RegistrationForm() {
                                         className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 transition-all duration-200 ${
                                             errors.phone 
                                                 ? 'border-red-500 focus:ring-red-500/10' 
-                                                : 'border-slate-200 focus:border-ui-blue focus:ring-ui-blue/10'
+                                                : 'border-slate-200 focus:border-[#2856C3] focus:ring-[#2856C3]'
                                         }`}
                                         placeholder="e.g. 08031234567"
                                     />
@@ -598,7 +622,7 @@ export default function RegistrationForm() {
                                         className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 transition-all duration-200 ${
                                             errors.faculty 
                                                 ? 'border-red-500 focus:ring-red-500/10' 
-                                                : 'border-slate-200 focus:border-ui-blue focus:ring-ui-blue/10'
+                                                : 'border-slate-200 focus:border-[#2856C3] focus:ring-[#2856C3]'
                                         }`}
                                         placeholder="e.g. Faculty of Science"
                                     />
@@ -623,7 +647,7 @@ export default function RegistrationForm() {
                                         className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 transition-all duration-200 ${
                                             errors.department 
                                                 ? 'border-red-500 focus:ring-red-500/10' 
-                                                : 'border-slate-200 focus:border-ui-blue focus:ring-ui-blue/10'
+                                                : 'border-slate-200 focus:border-[#2856C3] focus:ring-[#2856C3]'
                                         }`}
                                         placeholder="e.g. Computer Science"
                                     />
@@ -671,7 +695,7 @@ export default function RegistrationForm() {
                                                 ? 'border-red-500 focus:ring-red-500/10'
                                                 : formData.username && validateUsername(formData.username)
                                                 ? 'border-emerald-500 focus:ring-emerald-500/10'
-                                                : 'border-slate-200 focus:border-ui-blue focus:ring-ui-blue/10'
+                                                : 'border-slate-200 focus:border-[#2856C3] focus:ring-[#2856C3]'
                                         }`}
                                         placeholder="e.g. ja.brown"
                                     />
@@ -712,7 +736,7 @@ export default function RegistrationForm() {
                                         className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 transition-all duration-200 ${
                                             errors.password
                                                 ? 'border-red-500 focus:ring-red-500/10'
-                                                : 'border-slate-200 focus:border-ui-blue focus:ring-ui-blue/10'
+                                                : 'border-slate-200 focus:border-[#2856C3] focus:ring-[#2856C3]'
                                         }`}
                                         placeholder="••••••••"
                                     />
@@ -771,7 +795,7 @@ export default function RegistrationForm() {
                                                 ? 'border-red-500 focus:ring-red-500/10'
                                                 : formData.passwordConfirmation && formData.password === formData.passwordConfirmation
                                                 ? 'border-emerald-500 focus:ring-emerald-500/10'
-                                                : 'border-slate-200 focus:border-ui-blue focus:ring-ui-blue/10'
+                                                : 'border-slate-200 focus:border-[#2856C3] focus:ring-[#2856C3]'
                                         }`}
                                         placeholder="••••••••"
                                     />
@@ -842,7 +866,7 @@ export default function RegistrationForm() {
                                         />
                                         <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all duration-200 ${
                                             formData.salaryDeductionAuthorized
-                                                ? 'bg-ui-blue border-ui-blue shadow-sm'
+                                                ? 'bg-[#2856C3] border-[#2856C3] shadow-sm'
                                                 : errors.salaryDeductionAuthorized
                                                 ? 'border-red-500 bg-red-50'
                                                 : 'border-slate-300 bg-slate-50 group-hover:border-slate-400'
@@ -1176,7 +1200,7 @@ export default function RegistrationForm() {
                             <button
                                 type="button"
                                 onClick={() => window.print()}
-                                className="px-6 py-3 bg-white hover:bg-slate-50 text-slate-750 rounded-xl text-sm font-bold tracking-wide transition-all duration-200 border border-slate-200 flex items-center justify-center gap-2 cursor-pointer"
+                                className="px-6 py-3 bg-white hover:bg-slate-100 text-slate-900 rounded-xl text-sm font-bold tracking-wide transition-all duration-200 border border-slate-300 flex items-center justify-center gap-2 cursor-pointer"
                             >
                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -1186,7 +1210,7 @@ export default function RegistrationForm() {
                             <button
                                 type="button"
                                 onClick={resetForm}
-                                className="px-6 py-3 bg-gradient-to-r from-ui-blue to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white rounded-xl text-sm font-bold tracking-wide shadow-md transition-all duration-200 cursor-pointer"
+                                className="px-6 py-3 bg-ui-blue hover:bg-blue-800 text-white rounded-xl text-sm font-bold tracking-wide shadow-md transition-all duration-200 cursor-pointer"
                             >
                                 Register Another Staff Member
                             </button>
@@ -1196,12 +1220,12 @@ export default function RegistrationForm() {
 
                 {/* Bottom Navigation Buttons */}
                 {currentStep <= 4 && (
-                    <div className="flex justify-between items-center pt-8 mt-8 border-t border-slate-100">
+                    <div className="flex flex-col-reverse sm:flex-row gap-4 justify-between items-center pt-8 mt-8 border-t border-slate-300">
                         {currentStep > 1 ? (
                             <button
                                 type="button"
                                 onClick={handleBack}
-                                className="px-5 py-3 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-800 rounded-xl text-sm font-bold tracking-wide transition-all duration-200 border border-slate-200 flex items-center gap-2 group cursor-pointer"
+                                className="w-full sm:w-auto px-5 py-3 bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 rounded-xl text-sm font-bold tracking-wide transition-all duration-200 border border-slate-300 flex items-center justify-center gap-2 group cursor-pointer"
                             >
                                 <svg className="w-4 h-4 transform group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -1209,14 +1233,14 @@ export default function RegistrationForm() {
                                 Back
                             </button>
                         ) : (
-                            <div className="w-1" />
+                            <div className="hidden sm:block w-1" />
                         )}
 
                         {currentStep < 4 ? (
                             <button
                                 type="button"
                                 onClick={handleNext}
-                                className="px-6 py-3 bg-gradient-to-r from-ui-blue to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white rounded-xl text-sm font-bold tracking-wide shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2 group cursor-pointer"
+                                className="w-full sm:w-auto px-6 py-3 bg-[#2856C3] hover:bg-blue-800 text-white rounded-xl text-sm font-bold tracking-wide shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2 group cursor-pointer"
                             >
                                 Next Step
                                 <svg className="w-4 h-4 transform group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
@@ -1228,7 +1252,7 @@ export default function RegistrationForm() {
                                 type="button"
                                 onClick={handleSubmit}
                                 disabled={isSubmitting}
-                                className="px-8 py-3 bg-gradient-to-r from-ui-blue to-ui-gold text-white rounded-xl text-sm font-bold tracking-wide shadow-md transition-all duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                className="w-full sm:w-auto px-8 py-3 bg-[#2856C3] hover:bg-blue-800 text-white rounded-xl text-sm font-bold tracking-wide shadow-md transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                             >
                                 {isSubmitting ? (
                                     <>
