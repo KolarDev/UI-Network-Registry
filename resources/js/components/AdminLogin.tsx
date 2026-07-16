@@ -58,7 +58,7 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
             <div className="text-center mb-6 mt-2">
                 {/* University Logo */}
                 <div className="w-16 h-16 md:w-20 md:h-20 mx-auto mb-4 flex items-center justify-center">
-                    <img src="/images/ui-logo.png" alt="University of Ibadan Logo" className="w-full h-full object-contain" />
+                    <img src="/images/ui-logo.jpg" alt="University of Ibadan Logo" className="w-full h-full object-contain" />
                 </div>
                 <h2 className="text-2xl font-bold font-serif text-slate-900 tracking-wide">
                     ITMS ADMIN PORTAL

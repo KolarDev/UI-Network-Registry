@@ -194,7 +194,7 @@ export default function AdminDashboard() {
             <div className="relative border-b border-slate-200 bg-[#2856C3] text-white p-6 flex flex-col md:flex-row justify-between items-center gap-4">
                 <div className="flex items-center gap-4">
                     <div className="w-16 h-16 md:w-20 md:h-20 flex-shrink-0 flex items-center justify-center">
-                        <img src="/images/ui-logo.png" alt="University of Ibadan Logo" className="w-full h-full object-contain" />
+                        <img src="/images/ui-logo.jpg" alt="University of Ibadan Logo" className="w-full h-full object-contain" />
                     </div>
                     <div>
                         <h2 className="text-xl sm:text-2xl font-bold font-serif text-white tracking-wide">
