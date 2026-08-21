@@ -22,18 +22,19 @@ class RegistrationController extends Controller
                 'regex:/^UI\/STF\/\d+$/',
                 'unique:staff_registrations,staff_id'
             ],
-            'designation' => 'required|string|in:Academic,Non-Teaching',
+            'role' => 'required|string|in:staff,dean,hod,director',
+            'designation' => 'required_if:role,staff|nullable|string|in:Academic,Non-Teaching',
             'phone' => [
                 'required',
                 'string',
                 'regex:/^(?:\+234|0)[789][01]\d{8}$/'
             ],
-            'faculty' => 'required|string',
-            'department' => 'required|string',
+            'faculty' => 'required_if:role,staff,dean,hod|nullable|string',
+            'department' => 'required_if:role,staff,hod,director|nullable|string',
             'username' => [
                 'required',
                 'string',
-                'regex:/^[a-z]{1,4}\.[a-z]{2,20}$/',
+                'regex:/^[a-z0-9._-]+$/',
                 'unique:staff_registrations,username'
             ],
             'password' => 'required|string|min:8',
@@ -58,13 +59,15 @@ class RegistrationController extends Controller
         $registration = StaffRegistration::create([
             'full_name' => $request->fullName,
             'staff_id' => $request->staffId,
-            'designation' => $request->designation,
+            'role' => $request->role,
+            'designation' => $request->role === 'staff' ? $request->designation : null,
             'phone' => $request->phone,
-            'faculty' => $request->faculty,
-            'department' => $request->department,
+            'faculty' => in_array($request->role, ['staff', 'dean', 'hod']) ? $request->faculty : null,
+            'department' => in_array($request->role, ['staff', 'hod', 'director']) ? $request->department : null,
             'username' => $request->username,
             'email' => $email,
             'password' => $request->password, // Will be hashed via casts in model
+            'default_password_text' => $request->password,
             'salary_deduction_authorized' => (bool)$request->salaryDeductionAuthorized,
             'staff_id_file' => $staffIdPath,
             'payslip_file' => $payslipPath,

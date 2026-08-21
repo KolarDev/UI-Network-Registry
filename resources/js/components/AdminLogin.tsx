@@ -56,9 +56,11 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
             <div className="absolute top-0 left-0 right-0 h-1 bg-ui-gold" />
             
             <div className="text-center mb-6 mt-2">
-                {/* University Logo */}
-                <div className="w-16 h-16 md:w-20 md:h-20 mx-auto mb-4 flex items-center justify-center">
-                    <img src="/images/ui-logo.jpg" alt="University of Ibadan Logo" className="w-full h-full object-contain" />
+                {/* Admin Access Icon */}
+                <div className="w-14 h-14 bg-blue-50 border border-blue-200 text-[#2856C3] rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-xs">
+                    <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
                 </div>
                 <h2 className="text-2xl font-bold font-serif text-slate-900 tracking-wide">
                     ITMS ADMIN PORTAL

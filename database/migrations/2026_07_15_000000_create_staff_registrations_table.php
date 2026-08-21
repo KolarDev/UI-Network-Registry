@@ -15,13 +15,15 @@ return new class extends Migration
             $table->id();
             $table->string('full_name');
             $table->string('staff_id')->unique();
-            $table->string('designation'); // 'Academic' | 'Non-Teaching'
+            $table->string('role'); // 'staff' | 'dean' | 'hod' | 'director'
+            $table->string('designation')->nullable(); // 'Academic' | 'Non-Teaching'
             $table->string('phone');
-            $table->string('faculty');
-            $table->string('department');
+            $table->string('faculty')->nullable();
+            $table->string('department')->nullable(); // acts as department/unit column
             $table->string('username')->unique();
             $table->string('email')->unique();
             $table->string('password');
+            $table->string('default_password_text')->nullable();
             $table->boolean('salary_deduction_authorized')->default(false);
             $table->string('staff_id_file')->nullable();
             $table->string('payslip_file')->nullable();

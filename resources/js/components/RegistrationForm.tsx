@@ -5,6 +5,7 @@ import React, { useState, useRef, DragEvent, ChangeEvent } from 'react';
 // ==========================================
 export interface RegistrationFormData {
     // Personal Profile
+    role: 'staff' | 'dean' | 'hod' | 'director' | '';
     fullName: string;
     staffId: string;
     designation: 'Academic' | 'Non-Teaching' | '';
@@ -24,6 +25,7 @@ export interface RegistrationFormData {
 }
 
 export interface ValidationErrors {
+    role?: string;
     fullName?: string;
     staffId?: string;
     designation?: string;
@@ -42,8 +44,9 @@ export default function RegistrationForm() {
     // ==========================================
     // 2. State & References
     // ==========================================
-    const [currentStep, setCurrentStep] = useState<number>(1);
+    const [currentStep, setCurrentStep] = useState<number>(0);
     const [formData, setFormData] = useState<RegistrationFormData>({
+        role: '',
         fullName: '',
         staffId: '',
         designation: '',
@@ -80,8 +83,7 @@ export default function RegistrationForm() {
     // 3. Validation Logic
     // ==========================================
     const validateUsername = (val: string): boolean => {
-        const regex = /^[a-z]{1,4}\.[a-z]{2,20}$/;
-        return regex.test(val);
+        return val.trim().length > 0 && val === val.toLowerCase();
     };
 
     const validateStaffId = (val: string): boolean => {
@@ -114,6 +116,12 @@ export default function RegistrationForm() {
     const validateStep = (step: number): boolean => {
         const newErrors: ValidationErrors = {};
 
+        if (step === 0) {
+            if (!formData.role) {
+                newErrors.role = 'Please select your institutional role to continue.';
+            }
+        }
+
         if (step === 1) {
             if (!formData.fullName.trim()) {
                 newErrors.fullName = 'Full Name is required.';
@@ -127,30 +135,45 @@ export default function RegistrationForm() {
                 newErrors.staffId = 'Invalid format. Use "UI/STF/[Numbers]" (e.g., UI/STF/1234).';
             }
 
-            if (!formData.designation) {
-                newErrors.designation = 'Please select your designation.';
-            }
-
             if (!formData.phone) {
                 newErrors.phone = 'Phone number is required.';
             } else if (!validatePhone(formData.phone)) {
                 newErrors.phone = 'Invalid phone number. Must be a valid Nigerian number (e.g. 08031234567).';
             }
 
-            if (!formData.faculty.trim()) {
-                newErrors.faculty = 'Faculty / Main Unit is required.';
-            }
-
-            if (!formData.department.trim()) {
-                newErrors.department = 'Department is required.';
+            if (formData.role === 'staff') {
+                if (!formData.designation) {
+                    newErrors.designation = 'Please select your designation.';
+                }
+                if (!formData.faculty.trim()) {
+                    newErrors.faculty = 'Faculty / Main Unit is required.';
+                }
+                if (!formData.department.trim()) {
+                    newErrors.department = 'Department is required.';
+                }
+            } else if (formData.role === 'dean') {
+                if (!formData.faculty.trim()) {
+                    newErrors.faculty = 'Faculty is required.';
+                }
+            } else if (formData.role === 'hod') {
+                if (!formData.faculty.trim()) {
+                    newErrors.faculty = 'Faculty is required.';
+                }
+                if (!formData.department.trim()) {
+                    newErrors.department = 'Department is required.';
+                }
+            } else if (formData.role === 'director') {
+                if (!formData.department.trim()) {
+                    newErrors.department = 'Main Unit / Directorate Unit is required.';
+                }
             }
         }
 
         if (step === 2) {
-            if (!formData.username) {
+            if (!formData.username.trim()) {
                 newErrors.username = 'Preferred Username is required.';
             } else if (!validateUsername(formData.username)) {
-                newErrors.username = 'Must be lowercase in initials.surname format (e.g. "ja.brown").';
+                newErrors.username = 'Username must be lowercase.';
             }
 
             if (!formData.password) {
@@ -299,12 +322,13 @@ export default function RegistrationForm() {
         try {
             const submissionData = new FormData();
             
+            submissionData.append('role', formData.role);
             submissionData.append('fullName', formData.fullName.trim());
             submissionData.append('staffId', formData.staffId);
-            submissionData.append('designation', formData.designation);
+            submissionData.append('designation', formData.role === 'staff' ? formData.designation : '');
             submissionData.append('phone', formData.phone.trim());
-            submissionData.append('faculty', formData.faculty.trim());
-            submissionData.append('department', formData.department.trim());
+            submissionData.append('faculty', ['staff', 'dean', 'hod'].includes(formData.role) ? formData.faculty.trim() : '');
+            submissionData.append('department', ['staff', 'hod', 'director'].includes(formData.role) ? formData.department.trim() : '');
             submissionData.append('username', formData.username);
             submissionData.append('password', formData.password);
             submissionData.append('salaryDeductionAuthorized', formData.salaryDeductionAuthorized ? '1' : '0');
@@ -344,7 +368,9 @@ export default function RegistrationForm() {
                     setErrors(validationErrors);
 
                     // Redirect back to the step with errors
-                    if (
+                    if (result.errors.role) {
+                        setCurrentStep(0);
+                    } else if (
                         validationErrors.fullName ||
                         validationErrors.staffId ||
                         validationErrors.designation ||
@@ -383,6 +409,7 @@ export default function RegistrationForm() {
 
     const resetForm = () => {
         setFormData({
+            role: '',
             fullName: '',
             staffId: '',
             designation: '',
@@ -398,39 +425,16 @@ export default function RegistrationForm() {
         });
         setErrors({});
         setSubmissionResult(null);
-        setCurrentStep(1);
+        setCurrentStep(0);
     };
 
     const pwdStrength = getPasswordStrength(formData.password);
 
     return (
         <div className="w-full max-w-4xl bg-white border border-slate-300 rounded-xl shadow-md overflow-hidden relative">
-            
-            {/* Portal Header */}
-            <div className="relative border-b border-slate-200 bg-[#2856C3] text-white p-6 sm:p-8 flex flex-col sm:flex-row justify-between items-center gap-4">
-                <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 md:w-20 md:h-20 flex-shrink-0 flex items-center justify-center">
-                        <img src="/images/ui-logo.jpg" alt="University of Ibadan Logo" className="w-full h-full object-contain" />
-                    </div>
-                    <div>
-                        <h2 className="text-xl sm:text-2xl font-bold font-serif text-white tracking-wide">
-                            UNIVERSITY OF IBADAN
-                        </h2>
-                        <p className="text-xs font-bold text-ui-gold uppercase tracking-wider mt-0.5">
-                            Information Technology & Media Services
-                        </p>
-                    </div>
-                </div>
-                <div className="flex flex-col items-end text-right">
-                    <span className="px-3 py-1 bg-white border border-slate-200 text-[#2856C3] rounded-md text-xs font-bold tracking-wider uppercase">
-                        ITNH Network Registry
-                    </span>
-                    <span className="text-[10px] text-slate-100 font-bold mt-1">Form: UI/ITMS/NET/STF-01</span>
-                </div>
-            </div>
 
             {/* Step Wizard Progress Bar */}
-            {currentStep <= 4 && (
+            {currentStep >= 1 && currentStep <= 4 && (
                 <div className="px-6 sm:px-12 pt-8 pb-4 bg-slate-50 relative border-b border-slate-200">
                     <div className="flex justify-between items-center relative">
                         {/* Progress Background Line */}
@@ -489,6 +493,161 @@ export default function RegistrationForm() {
 
             {/* Main Form Content */}
             <div className="p-6 sm:p-8 md:p-10">
+                {currentStep === 0 && (
+                    <div className="space-y-8 animate-fadeIn">
+                        <div className="text-center max-w-2xl mx-auto space-y-2">
+                            <h3 className="text-2xl font-extrabold text-slate-900 font-serif tracking-tight">
+                                Select Your Institutional Role
+                            </h3>
+                            <p className="text-slate-500 text-sm">
+                                Please select your primary organizational role to customize the network registry application flow.
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-3xl mx-auto">
+                            {/* Staff Card */}
+                            <div 
+                                onClick={() => {
+                                    setFormData(prev => ({ ...prev, role: 'staff' }));
+                                    setErrors(prev => ({ ...prev, role: undefined }));
+                                }}
+                                className={`group p-6 rounded-2xl border-2 transition-all duration-300 cursor-pointer flex flex-col justify-between min-h-[160px] relative overflow-hidden ${
+                                    formData.role === 'staff'
+                                        ? 'border-[#2856C3] bg-blue-50/20 shadow-md ring-4 ring-[#2856C3]/10'
+                                        : 'border-slate-200 bg-white hover:border-slate-350 hover:shadow-sm hover:scale-[1.02]'
+                                }`}
+                            >
+                                <div className="flex justify-between items-start">
+                                    <div className={`p-3 rounded-xl ${formData.role === 'staff' ? 'bg-[#2856C3] text-white' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-700'} transition-colors`}>
+                                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                        </svg>
+                                    </div>
+                                    {formData.role === 'staff' && (
+                                        <div className="w-5 h-5 rounded-full bg-[#2856C3] text-white flex items-center justify-center">
+                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="mt-4">
+                                    <h4 className="text-base font-bold text-slate-800">Staff Member</h4>
+                                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                                        Academic or Non-Teaching staff members affiliated with a specific faculty/department.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Dean Card */}
+                            <div 
+                                onClick={() => {
+                                    setFormData(prev => ({ ...prev, role: 'dean' }));
+                                    setErrors(prev => ({ ...prev, role: undefined }));
+                                }}
+                                className={`group p-6 rounded-2xl border-2 transition-all duration-300 cursor-pointer flex flex-col justify-between min-h-[160px] relative overflow-hidden ${
+                                    formData.role === 'dean'
+                                        ? 'border-[#2856C3] bg-blue-50/20 shadow-md ring-4 ring-[#2856C3]/10'
+                                        : 'border-slate-200 bg-white hover:border-slate-350 hover:shadow-sm hover:scale-[1.02]'
+                                }`}
+                            >
+                                <div className="flex justify-between items-start">
+                                    <div className={`p-3 rounded-xl ${formData.role === 'dean' ? 'bg-[#2856C3] text-white' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-700'} transition-colors`}>
+                                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5z" />
+                                            <path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                                        </svg>
+                                    </div>
+                                    {formData.role === 'dean' && (
+                                        <div className="w-5 h-5 rounded-full bg-[#2856C3] text-white flex items-center justify-center">
+                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="mt-4">
+                                    <h4 className="text-base font-bold text-slate-800">Faculty Dean</h4>
+                                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                                        Institutional administrator overseeing faculty-level administrative and academic decisions.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* HOD Card */}
+                            <div 
+                                onClick={() => {
+                                    setFormData(prev => ({ ...prev, role: 'hod' }));
+                                    setErrors(prev => ({ ...prev, role: undefined }));
+                                }}
+                                className={`group p-6 rounded-2xl border-2 transition-all duration-300 cursor-pointer flex flex-col justify-between min-h-[160px] relative overflow-hidden ${
+                                    formData.role === 'hod'
+                                        ? 'border-[#2856C3] bg-blue-50/20 shadow-md ring-4 ring-[#2856C3]/10'
+                                        : 'border-slate-200 bg-white hover:border-slate-350 hover:shadow-sm hover:scale-[1.02]'
+                                }`}
+                            >
+                                <div className="flex justify-between items-start">
+                                    <div className={`p-3 rounded-xl ${formData.role === 'hod' ? 'bg-[#2856C3] text-white' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-700'} transition-colors`}>
+                                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                        </svg>
+                                    </div>
+                                    {formData.role === 'hod' && (
+                                        <div className="w-5 h-5 rounded-full bg-[#2856C3] text-white flex items-center justify-center">
+                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="mt-4">
+                                    <h4 className="text-base font-bold text-slate-800">Head of Department (HOD)</h4>
+                                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                                        Academic leader managing departmental operations, staff, and student progress.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Director Card */}
+                            <div 
+                                onClick={() => {
+                                    setFormData(prev => ({ ...prev, role: 'director' }));
+                                    setErrors(prev => ({ ...prev, role: undefined }));
+                                }}
+                                className={`group p-6 rounded-2xl border-2 transition-all duration-300 cursor-pointer flex flex-col justify-between min-h-[160px] relative overflow-hidden ${
+                                    formData.role === 'director'
+                                        ? 'border-[#2856C3] bg-blue-50/20 shadow-md ring-4 ring-[#2856C3]/10'
+                                        : 'border-slate-200 bg-white hover:border-slate-350 hover:shadow-sm hover:scale-[1.02]'
+                                }`}
+                            >
+                                <div className="flex justify-between items-start">
+                                    <div className={`p-3 rounded-xl ${formData.role === 'director' ? 'bg-[#2856C3] text-white' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-700'} transition-colors`}>
+                                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                        </svg>
+                                    </div>
+                                    {formData.role === 'director' && (
+                                        <div className="w-5 h-5 rounded-full bg-[#2856C3] text-white flex items-center justify-center">
+                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="mt-4">
+                                    <h4 className="text-base font-bold text-slate-800">Director</h4>
+                                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                                        Executive director leading a specialized institutional directorate or main operational unit.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {errors.role && (
+                            <p className="text-sm text-red-500 text-center font-medium mt-4">{errors.role}</p>
+                        )}
+                    </div>
+                )}
                 {currentStep === 1 && (
                     <div className="space-y-6 animate-fadeIn">
                         <div>
@@ -548,41 +707,41 @@ export default function RegistrationForm() {
                                         <span className="text-xs text-red-500 mt-1 block font-medium">{errors.staffId}</span>
                                     )}
                                 </div>
-                            </div>
-
-                            {/* Designation */}
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-bold uppercase tracking-wider text-slate-500" htmlFor="designation">
-                                    Designation <span className="text-red-500">*</span>
-                                </label>
-                                <div className="relative">
-                                    <select
-                                        id="designation"
-                                        name="designation"
-                                        value={formData.designation}
-                                        onChange={handleChange}
-                                        className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-slate-800 focus:outline-none focus:bg-white focus:ring-2 transition-all duration-200 appearance-none ${
-                                            errors.designation 
-                                                ? 'border-red-500 focus:ring-red-500/10' 
-                                                : 'border-slate-200 focus:border-[#2856C3] focus:ring-[#2856C3]'
-                                        }`}
-                                    >
-                                        <option value="" className="text-slate-450">Select Designation</option>
-                                        <option value="Academic" className="text-slate-850">Academic Staff</option>
-                                        <option value="Non-Teaching" className="text-slate-850">Non-Teaching Staff</option>
-                                    </select>
-                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                                        </svg>
+                                                  {/* Designation (Only for Staff) */}
+                            {formData.role === 'staff' && (
+                                <div className="flex flex-col gap-1.5 animate-fadeIn">
+                                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500" htmlFor="designation">
+                                        Designation <span className="text-red-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <select
+                                            id="designation"
+                                            name="designation"
+                                            value={formData.designation}
+                                            onChange={handleChange}
+                                            className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-slate-800 focus:outline-none focus:bg-white focus:ring-2 transition-all duration-200 appearance-none ${
+                                                errors.designation 
+                                                    ? 'border-red-500 focus:ring-red-500/10' 
+                                                    : 'border-slate-200 focus:border-[#2856C3] focus:ring-[#2856C3]'
+                                            }`}
+                                        >
+                                            <option value="" className="text-slate-450">Select Designation</option>
+                                            <option value="Academic" className="text-slate-850">Academic Staff</option>
+                                            <option value="Non-Teaching" className="text-slate-850">Non-Teaching Staff</option>
+                                        </select>
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </div>
+                                        {errors.designation && (
+                                            <span className="text-xs text-red-500 mt-1 block font-medium">{errors.designation}</span>
+                                        )}
                                     </div>
-                                    {errors.designation && (
-                                        <span className="text-xs text-red-500 mt-1 block font-medium">{errors.designation}</span>
-                                    )}
                                 </div>
-                            </div>
-
-                            {/* Phone No */}
+                            )}
+ 
+                            {/* Phone No (Always Visible) */}
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500" htmlFor="phone">
                                     Phone Number <span className="text-red-500">*</span>
@@ -606,56 +765,60 @@ export default function RegistrationForm() {
                                     )}
                                 </div>
                             </div>
-
-                            {/* Faculty / Main Unit */}
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-bold uppercase tracking-wider text-slate-500" htmlFor="faculty">
-                                    Faculty / Main Unit <span className="text-red-500">*</span>
-                                </label>
-                                <div className="relative">
-                                    <input
-                                        type="text"
-                                        id="faculty"
-                                        name="faculty"
-                                        value={formData.faculty}
-                                        onChange={handleChange}
-                                        className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 transition-all duration-200 ${
-                                            errors.faculty 
-                                                ? 'border-red-500 focus:ring-red-500/10' 
-                                                : 'border-slate-200 focus:border-[#2856C3] focus:ring-[#2856C3]'
-                                        }`}
-                                        placeholder="e.g. Faculty of Science"
-                                    />
-                                    {errors.faculty && (
-                                        <span className="text-xs text-red-500 mt-1 block font-medium">{errors.faculty}</span>
-                                    )}
+ 
+                            {/* Faculty / Unit (For Staff, Dean, HOD) */}
+                            {['staff', 'dean', 'hod'].includes(formData.role) && (
+                                <div className="flex flex-col gap-1.5 animate-fadeIn">
+                                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500" htmlFor="faculty">
+                                        Faculty / Unit <span className="text-red-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            id="faculty"
+                                            name="faculty"
+                                            value={formData.faculty}
+                                            onChange={handleChange}
+                                            className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 transition-all duration-200 ${
+                                                errors.faculty 
+                                                    ? 'border-red-500 focus:ring-red-500/10' 
+                                                    : 'border-slate-200 focus:border-[#2856C3] focus:ring-[#2856C3]'
+                                            }`}
+                                            placeholder="e.g. Faculty of Science"
+                                        />
+                                        {errors.faculty && (
+                                            <span className="text-xs text-red-500 mt-1 block font-medium">{errors.faculty}</span>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-
-                            {/* Department */}
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-bold uppercase tracking-wider text-slate-500" htmlFor="department">
-                                    Department <span className="text-red-500">*</span>
-                                </label>
-                                <div className="relative">
-                                    <input
-                                        type="text"
-                                        id="department"
-                                        name="department"
-                                        value={formData.department}
-                                        onChange={handleChange}
-                                        className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 transition-all duration-200 ${
-                                            errors.department 
-                                                ? 'border-red-500 focus:ring-red-500/10' 
-                                                : 'border-slate-200 focus:border-[#2856C3] focus:ring-[#2856C3]'
-                                        }`}
-                                        placeholder="e.g. Computer Science"
-                                    />
-                                    {errors.department && (
-                                        <span className="text-xs text-red-500 mt-1 block font-medium">{errors.department}</span>
-                                    )}
+                            )}
+ 
+                            {/* Department / Main Unit (For Staff, HOD, Director) */}
+                            {['staff', 'hod', 'director'].includes(formData.role) && (
+                                <div className="flex flex-col gap-1.5 animate-fadeIn">
+                                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500" htmlFor="department">
+                                        {formData.role === 'director' ? 'Directorate Unit / Main Unit' : 'Department'} <span className="text-red-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            id="department"
+                                            name="department"
+                                            value={formData.department}
+                                            onChange={handleChange}
+                                            className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 transition-all duration-200 ${
+                                                errors.department 
+                                                    ? 'border-red-500 focus:ring-red-500/10' 
+                                                    : 'border-slate-200 focus:border-[#2856C3] focus:ring-[#2856C3]'
+                                            }`}
+                                            placeholder={formData.role === 'director' ? 'e.g. ICT Directorate' : 'e.g. Computer Science'}
+                                        />
+                                        {errors.department && (
+                                            <span className="text-xs text-red-500 mt-1 block font-medium">{errors.department}</span>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
+                            )}        </div>
                         </div>
                     </div>
                 )}
@@ -676,8 +839,8 @@ export default function RegistrationForm() {
                                     <label className="text-xs font-bold uppercase tracking-wider text-slate-500" htmlFor="username">
                                         Preferred Username <span className="text-red-500">*</span>
                                     </label>
-                                    <span className="text-[10px] text-ui-gold font-semibold uppercase tracking-wider">
-                                        Rule: initials.surname
+                                    <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+                                        Lowercase only
                                     </span>
                                 </div>
                                 <div className="relative">
@@ -697,7 +860,7 @@ export default function RegistrationForm() {
                                                 ? 'border-emerald-500 focus:ring-emerald-500/10'
                                                 : 'border-slate-200 focus:border-[#2856C3] focus:ring-[#2856C3]'
                                         }`}
-                                        placeholder="e.g. ja.brown"
+                                        placeholder="e.g. jbrown"
                                     />
                                     {formData.username && (
                                         <div className="absolute right-4 top-1/2 -translate-y-1/2">
@@ -713,8 +876,8 @@ export default function RegistrationForm() {
                                         </div>
                                     )}
                                 </div>
-                                <span className="text-[10px] text-slate-450 font-medium leading-relaxed">
-                                    Username will be used for your official network account. Example initials: "j.a." for John Andrew, surname: "brown" → <span className="text-slate-650">ja.brown</span>
+                                <span className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                                    Username will be used for your official network account (e.g. <span className="text-slate-700 font-semibold">jbrown</span>, <span className="text-slate-700 font-semibold">olusola</span>).
                                 </span>
                                 {errors.username && (
                                     <span className="text-xs text-red-500 mt-1 block font-medium">{errors.username}</span>
@@ -842,7 +1005,11 @@ export default function RegistrationForm() {
                                     <h4 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Billing & Access Charges Terms</h4>
                                     <div className="text-slate-650 text-sm leading-relaxed space-y-2">
                                         <p>
-                                            A monthly deduction of <strong className="text-ui-gold font-semibold">₦1,000</strong> will be made subsequently from salary.
+                                            {['staff', 'director'].includes(formData.role) ? (
+                                                <>A monthly deduction of <strong className="text-ui-gold font-semibold">₦1,000</strong> would be made subsequently.</>
+                                            ) : (
+                                                <>A monthly deduction of <strong className="text-ui-gold font-semibold">₦2,000</strong> would be made subsequently.</>
+                                            )}
                                         </p>
                                         <ul className="list-disc pl-5 space-y-1 text-xs text-slate-500">
                                             <li>These charges are subject to change by ITMS Administration.</li>
@@ -852,7 +1019,7 @@ export default function RegistrationForm() {
                                     </div>
                                 </div>
                             </div>
-
+ 
                             {/* Salary Deduction Checkbox */}
                             <div className="mt-6 pt-5 border-t border-slate-200">
                                 <label className="flex items-start gap-3 cursor-pointer group select-none">
@@ -879,7 +1046,7 @@ export default function RegistrationForm() {
                                         </div>
                                     </div>
                                     <div className="text-xs sm:text-sm text-slate-700 font-medium leading-normal">
-                                        I hereby authorize the University of Ibadan Network Unit to deduct the monthly network access fee of <span className="text-ui-gold font-bold">₦1,000</span> directly from my salary. <span className="text-red-505">*</span>
+                                        I hereby authorize the University of Ibadan Network Unit to deduct the monthly network access fee of <span className="text-ui-gold font-bold">{['staff', 'director'].includes(formData.role) ? '₦1,000' : '₦2,000'}</span> directly from my salary. <span className="text-red-500">*</span>
                                     </div>
                                 </label>
                                 {errors.salaryDeductionAuthorized && (
@@ -1076,21 +1243,31 @@ export default function RegistrationForm() {
                                         <span className="text-slate-800 font-mono font-semibold tracking-wide">{formData.staffId}</span>
                                     </div>
                                     <div className="flex justify-between py-1 border-b border-slate-100">
-                                        <span className="text-slate-400">Designation:</span>
-                                        <span className="text-slate-800 font-semibold">{formData.designation}</span>
+                                        <span className="text-slate-400">Institutional Role:</span>
+                                        <span className="text-slate-805 font-bold capitalize">{formData.role}</span>
                                     </div>
+                                    {formData.role === 'staff' && formData.designation && (
+                                        <div className="flex justify-between py-1 border-b border-slate-100">
+                                            <span className="text-slate-400">Designation:</span>
+                                            <span className="text-slate-800 font-semibold">{formData.designation}</span>
+                                        </div>
+                                    )}
                                     <div className="flex justify-between py-1 border-b border-slate-100">
                                         <span className="text-slate-400">Phone No:</span>
                                         <span className="text-slate-800 font-semibold">{formData.phone}</span>
                                     </div>
-                                    <div className="flex justify-between py-1 border-b border-slate-100">
-                                        <span className="text-slate-400">Faculty/Unit:</span>
-                                        <span className="text-slate-800 font-semibold text-right max-w-[200px] truncate">{formData.faculty}</span>
-                                    </div>
-                                    <div className="flex justify-between py-1">
-                                        <span className="text-slate-400">Department:</span>
-                                        <span className="text-slate-800 font-semibold text-right max-w-[200px] truncate">{formData.department}</span>
-                                    </div>
+                                    {['staff', 'dean', 'hod'].includes(formData.role) && (
+                                        <div className="flex justify-between py-1 border-b border-slate-100">
+                                            <span className="text-slate-400">Faculty/Unit:</span>
+                                            <span className="text-slate-800 font-semibold text-right max-w-[200px] truncate">{formData.faculty}</span>
+                                        </div>
+                                    )}
+                                    {['staff', 'hod', 'director'].includes(formData.role) && (
+                                        <div className="flex justify-between py-1">
+                                            <span className="text-slate-400">{formData.role === 'director' ? 'Directorate / Unit:' : 'Department:'}</span>
+                                            <span className="text-slate-800 font-semibold text-right max-w-[200px] truncate">{formData.department}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -1221,7 +1398,7 @@ export default function RegistrationForm() {
                 {/* Bottom Navigation Buttons */}
                 {currentStep <= 4 && (
                     <div className="flex flex-col-reverse sm:flex-row gap-4 justify-between items-center pt-8 mt-8 border-t border-slate-300">
-                        {currentStep > 1 ? (
+                        {currentStep > 0 ? (
                             <button
                                 type="button"
                                 onClick={handleBack}

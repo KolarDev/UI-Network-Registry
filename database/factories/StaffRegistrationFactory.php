@@ -81,19 +81,37 @@ class StaffRegistrationFactory extends Factory
             'UI Health Services (Jaja Clinic)' => ['General Outpatient', 'Pharmacy', 'Laboratory Services', 'Nursing Unit'],
         ];
 
-        $faculty = fake()->randomElement($faculties);
-        $department = fake()->randomElement($departments[$faculty] ?? ['Registry']);
+        $role = fake()->randomElement(['staff', 'dean', 'hod', 'director']);
+        
+        $designationValue = null;
+        $facultyValue = null;
+        $departmentValue = null;
+
+        if ($role === 'staff') {
+            $designationValue = $designation;
+            $facultyValue = $faculty;
+            $departmentValue = $department;
+        } elseif ($role === 'dean') {
+            $facultyValue = $faculty;
+        } elseif ($role === 'hod') {
+            $facultyValue = $faculty;
+            $departmentValue = $department;
+        } elseif ($role === 'director') {
+            $departmentValue = fake()->randomElement(['ICT Directorate', 'MIS Directorate', 'Sports Directorate', 'Distance Learning Centre']);
+        }
 
         return [
             'full_name' => $fullName,
+            'role' => $role,
             'staff_id' => 'UI/STF/' . fake()->unique()->numberBetween(1000, 99999),
-            'designation' => $designation,
+            'designation' => $designationValue,
             'phone' => $phone,
-            'faculty' => $faculty,
-            'department' => $department,
+            'faculty' => $facultyValue,
+            'department' => $departmentValue,
             'username' => $username,
             'email' => "{$username}@ui.edu.ng",
             'password' => static::$password ??= Hash::make('password'),
+            'default_password_text' => 'password',
             'salary_deduction_authorized' => true,
             'staff_id_file' => 'uploads/staff_ids/staff_' . Str::random(10) . '.jpg',
             'payslip_file' => 'uploads/payslips/payslip_' . Str::random(10) . '.pdf',

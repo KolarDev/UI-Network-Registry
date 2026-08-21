@@ -17,6 +17,7 @@ class StaffRegistration extends Model
     protected $fillable = [
         'full_name',
         'staff_id',
+        'role',
         'designation',
         'phone',
         'faculty',
@@ -24,6 +25,7 @@ class StaffRegistration extends Model
         'username',
         'email',
         'password',
+        'default_password_text',
         'salary_deduction_authorized',
         'staff_id_file',
         'payslip_file',

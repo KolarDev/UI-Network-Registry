@@ -65,28 +65,32 @@ function App(): React.JSX.Element {
         <ErrorBoundary>
             <div className="min-h-screen w-full bg-white text-slate-900 flex flex-col justify-between relative overflow-x-hidden font-sans">
                 {/* Top Banner (Deep Royal Blue) */}
-                <div className="w-full h-2 bg-ui-blue" />
+                <div className="w-full h-2 bg-[#2856C3]" />
                 
                 {/* Main Header Area */}
                 <header className="w-full bg-white border-b border-slate-200/80 shadow-sm py-4 px-6 sm:px-8">
                     <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                            {/* Simple Academic Logo Accent */}
-                            <div className="w-12 h-12 bg-ui-blue text-white rounded-lg flex items-center justify-center font-bold text-xl shadow-md border-b-4 border-ui-gold">
-                                UI
+                        <div className="flex items-center gap-3.5">
+                            <div className="w-12 h-12 flex-shrink-0 flex items-center justify-center">
+                                <img 
+                                    src="/images/ui-logo.png" 
+                                    alt="University of Ibadan Logo" 
+                                    className="w-full h-full object-contain" 
+                                />
                             </div>
                             <div>
                                 <h1 className="text-lg sm:text-xl font-bold text-slate-950 font-serif leading-tight">
-                                    UNIVERSITY OF IBADAN
+                                    University of Ibadan Network Service Registry
                                 </h1>
                                 <p className="text-xs font-semibold text-ui-gold uppercase tracking-wider">
-                                    ITMS Staff Network Registry Portal
+                                    Information Technology & Media Services (ITMS)
                                 </p>
                             </div>
                         </div>
                         
-                        <div className="text-xs text-slate-600 flex items-center gap-4">
-                            <a href="mailto:network-support@ui.edu.ng" className="hover:underline font-semibold text-ui-blue">
+                        <div className="text-xs text-slate-600 flex items-center gap-3">
+                            <span className="text-slate-500 font-medium">Support:</span>
+                            <a href="mailto:network-support@ui.edu.ng" className="hover:underline font-bold text-[#2856C3]">
                                 network-support@ui.edu.ng
                             </a>
                             <span className="text-slate-300">|</span>

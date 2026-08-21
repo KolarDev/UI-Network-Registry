@@ -108,6 +108,7 @@ class AdminSubmissionController extends Controller
                 'ID',
                 'Full Name',
                 'Staff ID',
+                'Role',
                 'Designation',
                 'Phone',
                 'Faculty',
@@ -127,6 +128,7 @@ class AdminSubmissionController extends Controller
                         $reg->id,
                         $reg->full_name,
                         $reg->staff_id,
+                        $reg->role,
                         $reg->designation,
                         $reg->phone,
                         $reg->faculty,
@@ -146,7 +148,7 @@ class AdminSubmissionController extends Controller
     }
 
     /**
-     * Download a private registration file securely.
+     * Download or preview a private registration file securely.
      */
     public function downloadFile(Request $request)
     {
@@ -158,6 +160,16 @@ class AdminSubmissionController extends Controller
 
         if (!$path || !\Illuminate\Support\Facades\Storage::disk('local')->exists($path)) {
             abort(404, 'File not found.');
+        }
+
+        if ($request->query('preview') || $request->query('inline')) {
+            $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($path);
+            $mimeType = \Illuminate\Support\Facades\Storage::disk('local')->mimeType($path) ?: 'application/octet-stream';
+
+            return response()->file($fullPath, [
+                'Content-Type' => $mimeType,
+                'Content-Disposition' => 'inline; filename="' . basename($path) . '"',
+            ]);
         }
 
         return \Illuminate\Support\Facades\Storage::disk('local')->download($path);
