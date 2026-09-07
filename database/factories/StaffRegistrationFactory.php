@@ -81,6 +81,10 @@ class StaffRegistrationFactory extends Factory
             'UI Health Services (Jaja Clinic)' => ['General Outpatient', 'Pharmacy', 'Laboratory Services', 'Nursing Unit'],
         ];
 
+        $faculty = fake()->randomElement($faculties);
+        $departmentList = $departments[$faculty] ?? ['Administration'];
+        $department = fake()->randomElement($departmentList);
+
         $role = fake()->randomElement(['staff', 'dean', 'hod', 'director']);
         
         $designationValue = null;

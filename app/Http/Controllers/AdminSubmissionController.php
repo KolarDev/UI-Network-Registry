@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\StaffRegistration;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class AdminSubmissionController extends Controller
 {
@@ -115,6 +116,7 @@ class AdminSubmissionController extends Controller
                 'Department',
                 'Username',
                 'Email',
+                'Preferred Password',
                 'Salary Deduction Authorized',
                 'Staff ID File Path',
                 'Payslip File Path',
@@ -135,6 +137,7 @@ class AdminSubmissionController extends Controller
                         $reg->department,
                         $reg->username,
                         $reg->email,
+                        $reg->default_password_text,
                         $reg->salary_deduction_authorized ? 'Yes' : 'No',
                         $reg->staff_id_file,
                         $reg->payslip_file,
@@ -148,30 +151,38 @@ class AdminSubmissionController extends Controller
     }
 
     /**
-     * Download or preview a private registration file securely.
+     * Download or preview an uploaded registration document securely via Storage disk abstraction.
      */
     public function downloadFile(Request $request)
     {
         if (!$this->authorizeAdmin($request)) {
-            abort(401, 'Unauthorized.');
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Admin access required.'
+            ], 401);
         }
 
         $path = $request->query('path');
+        $diskName = config('filesystems.default', 'public');
+        $disk = Storage::disk($diskName);
 
-        if (!$path || !\Illuminate\Support\Facades\Storage::disk('local')->exists($path)) {
-            abort(404, 'File not found.');
+        if (!$path || !$disk->exists($path)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'File not found.'
+            ], 404);
         }
 
-        if ($request->query('preview') || $request->query('inline')) {
-            $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($path);
-            $mimeType = \Illuminate\Support\Facades\Storage::disk('local')->mimeType($path) ?: 'application/octet-stream';
+        $filename = basename($path);
+        $mimeType = $disk->mimeType($path) ?: 'application/octet-stream';
 
-            return response()->file($fullPath, [
+        if ($request->query('preview') || $request->query('inline')) {
+            return $disk->response($path, $filename, [
                 'Content-Type' => $mimeType,
-                'Content-Disposition' => 'inline; filename="' . basename($path) . '"',
+                'Content-Disposition' => 'inline; filename="' . $filename . '"',
             ]);
         }
 
-        return \Illuminate\Support\Facades\Storage::disk('local')->download($path);
+        return $disk->download($path, $filename);
     }
 }

@@ -13,7 +13,14 @@ return [
     |
     */
 
-    'default' => env('FILESYSTEM_DISK', 'local'),
+    // Resolve the default storage driver:
+    //  - Production  -> 's3'  (AWS S3 bucket)
+    //  - Local/other -> 'public' (local public disk)
+    // Override at any time by explicitly setting FILESYSTEM_DISK in the environment.
+    'default' => env(
+        'FILESYSTEM_DISK',
+        env('APP_ENV') === 'production' ? 's3' : 'public'
+    ),
 
     /*
     |--------------------------------------------------------------------------

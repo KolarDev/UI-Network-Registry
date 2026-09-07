@@ -1,8 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import ChatThread, { ChatMessage } from './ChatThread';
 
 // ==========================================
 // 1. TypeScript Interfaces
 // ==========================================
+export type RegistrationStatus = 'pending' | 'in_review' | 'completed';
+
+export const STATUS_LABEL: Record<RegistrationStatus, string> = {
+    pending: 'Pending',
+    in_review: 'In Review',
+    completed: 'Completed',
+};
+
+export const STATUS_BADGE: Record<RegistrationStatus, string> = {
+    pending: 'bg-amber-50 text-amber-800 border-amber-200',
+    in_review: 'bg-blue-50 text-blue-800 border-blue-200',
+    completed: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+};
+
 export interface SubmissionRecord {
     id: string;
     fullName: string;
@@ -20,6 +35,9 @@ export interface SubmissionRecord {
     staffIdFilePath?: string;
     payslipFilePath?: string;
     defaultPasswordText?: string;
+    trackingId: string;
+    status: RegistrationStatus;
+    email?: string;
 }
 
 export default function AdminDashboard() {
@@ -44,6 +62,16 @@ export default function AdminDashboard() {
         filePath: string;
         isPdf: boolean;
     } | null>(null);
+
+    // Chat Drawer State
+    const [chatDrawerOpen, setChatDrawerOpen] = useState<boolean>(false);
+    const [chatTarget, setChatTarget] = useState<SubmissionRecord | null>(null);
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+    const [chatLoading, setChatLoading] = useState<boolean>(false);
+    const [chatError, setChatError] = useState<string | null>(null);
+
+    // Per-row status update state
+    const [updatingStatusFor, setUpdatingStatusFor] = useState<string | null>(null);
 
     const itemsPerPage = 10;
 
@@ -99,7 +127,10 @@ export default function AdminDashboard() {
                 submittedAt: dbRecord.created_at ? dbRecord.created_at.replace('T', ' ').slice(0, 16) : '',
                 staffIdFilePath: dbRecord.staff_id_file || '',
                 payslipFilePath: dbRecord.payslip_file || '',
-                defaultPasswordText: dbRecord.default_password_text || '',
+                defaultPasswordText: dbRecord.default_password_text || dbRecord.preferred_password || '',
+                trackingId: dbRecord.tracking_id || '',
+                status: (dbRecord.status as RegistrationStatus) || 'pending',
+                email: dbRecord.email || '',
             }));
 
             setSubmissions(mappedRecords);
@@ -186,6 +217,96 @@ export default function AdminDashboard() {
             filePath,
             isPdf,
         });
+    };
+
+    // PATCH /api/admin/registrations/{id}/status
+    const updateStatus = async (record: SubmissionRecord, next: RegistrationStatus) => {
+        if (record.status === next) return;
+        setUpdatingStatusFor(record.id);
+        try {
+            const adminToken = sessionStorage.getItem('admin_token') || '';
+            const resp = await fetch(`/api/admin/registrations/${record.id}/status`, {
+                method: 'PATCH',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${adminToken}`,
+                },
+                body: JSON.stringify({ status: next }),
+            });
+            let payload: any = null;
+            try {
+                payload = await resp.json();
+            } catch {
+                throw new Error(`Server returned an invalid response (HTTP ${resp.status}).`);
+            }
+            if (!resp.ok || !payload?.success) {
+                throw new Error(payload?.message || 'Failed to update status.');
+            }
+            setSubmissions((prev) =>
+                prev.map((r) => (r.id === record.id ? { ...r, status: next } : r)),
+            );
+            if (selectedSubmission?.id === record.id) {
+                setSelectedSubmission({ ...selectedSubmission, status: next });
+            }
+            if (chatTarget?.id === record.id) {
+                setChatTarget({ ...chatTarget, status: next });
+            }
+            showNotification(
+                'success',
+                `Status updated to “${STATUS_LABEL[next]}” for ${record.fullName}.`,
+            );
+        } catch (err: any) {
+            showNotification('error', err?.message || 'Failed to update status.');
+        } finally {
+            setUpdatingStatusFor(null);
+        }
+    };
+
+    // Open the chat drawer and load the message thread for the given record.
+    const openChat = async (record: SubmissionRecord) => {
+        if (!record.trackingId) {
+            showNotification('error', 'Tracking ID is missing for this record.');
+            return;
+        }
+        setChatTarget(record);
+        setChatDrawerOpen(true);
+        setChatLoading(true);
+        setChatError(null);
+        setChatMessages([]);
+        try {
+            const adminToken = sessionStorage.getItem('admin_token') || '';
+            const resp = await fetch(`/api/track/${encodeURIComponent(record.trackingId)}`, {
+                headers: {
+                    Accept: 'application/json',
+                    Authorization: `Bearer ${adminToken}`,
+                },
+            });
+            let payload: any = null;
+            try {
+                payload = await resp.json();
+            } catch {
+                throw new Error(`Server returned an invalid response (HTTP ${resp.status}).`);
+            }
+            if (!resp.ok || !payload?.success) {
+                throw new Error(payload?.message || 'Failed to load messages.');
+            }
+            setChatMessages(payload.registration?.messages || []);
+        } catch (err: any) {
+            setChatError(err?.message || 'Failed to load messages.');
+        } finally {
+            setChatLoading(false);
+        }
+    };
+
+    const closeChat = () => {
+        setChatDrawerOpen(false);
+        // Keep chatTarget so the drawer animates out with the same context.
+        setTimeout(() => {
+            setChatTarget(null);
+            setChatMessages([]);
+            setChatError(null);
+        }, 250);
     };
 
     // Get preview URL with preview parameter
@@ -376,17 +497,18 @@ export default function AdminDashboard() {
                             <p className="text-xs text-slate-500 mt-1">Try clearing some of your search parameters.</p>
                         </div>
                     ) : (
-                        <table className="w-full text-left border-collapse min-w-[950px]">
+                        <table className="w-full text-left border-collapse min-w-[1100px]">
                             <thead>
                                 <tr className="bg-[#2856C3] text-[10px] text-white font-bold uppercase tracking-wider border-b border-slate-200">
                                     <th className="py-3.5 px-4">Staff Member</th>
                                     <th className="py-3.5 px-4">Department / Unit</th>
                                     <th className="py-3.5 px-4">Staff ID No.</th>
                                     <th className="py-3.5 px-4">Role</th>
+                                    <th className="py-3.5 px-4">Status</th>
                                     <th className="py-3.5 px-4">Allocated Username</th>
                                     <th className="py-3.5 px-4">Preferred Password</th>
                                     <th className="py-3.5 px-4">Submitted Documents</th>
-                                    <th className="py-3.5 px-4 text-center">Action</th>
+                                    <th className="py-3.5 px-4 text-center">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200">
@@ -410,6 +532,11 @@ export default function AdminDashboard() {
                                                 {record.role === 'staff' && record.designation && (
                                                     <div className="text-[10px] text-ui-gold font-bold uppercase mt-0.5 tracking-wider">
                                                         {record.designation} Staff
+                                                    </div>
+                                                )}
+                                                {record.trackingId && (
+                                                    <div className="text-[10px] text-slate-500 font-mono mt-0.5 tracking-wide">
+                                                        {record.trackingId}
                                                     </div>
                                                 )}
                                             </td>
@@ -436,6 +563,55 @@ export default function AdminDashboard() {
                                                 <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 text-[#2856C3] rounded text-[11px]">
                                                     {record.role}
                                                 </span>
+                                            </td>
+
+                                            {/* Status (inline dropdown) */}
+                                            <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
+                                                <div className="flex items-center gap-1.5">
+                                                    <span
+                                                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full border ${STATUS_BADGE[record.status]}`}
+                                                        title="Current status"
+                                                    >
+                                                        <span
+                                                            className={`w-1.5 h-1.5 rounded-full ${
+                                                                record.status === 'completed'
+                                                                    ? 'bg-emerald-600'
+                                                                    : record.status === 'in_review'
+                                                                    ? 'bg-blue-600'
+                                                                    : 'bg-amber-500'
+                                                            }`}
+                                                        />
+                                                        {STATUS_LABEL[record.status]}
+                                                    </span>
+                                                    {record.status === 'completed' ? (
+                                                        <span
+                                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded border bg-slate-100 text-slate-700 border-slate-200"
+                                                            title="User edits are locked"
+                                                        >
+                                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                            </svg>
+                                                            Locked
+                                                        </span>
+                                                    ) : (
+                                                        <select
+                                                            aria-label="Change status"
+                                                            value={record.status}
+                                                            disabled={updatingStatusFor === record.id}
+                                                            onChange={(e) =>
+                                                                updateStatus(
+                                                                    record,
+                                                                    e.target.value as RegistrationStatus,
+                                                                )
+                                                            }
+                                                            className="text-[10px] font-bold uppercase tracking-wider rounded border border-slate-300 bg-white text-slate-700 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#2856C3] focus:border-[#2856C3] cursor-pointer disabled:opacity-50"
+                                                        >
+                                                            <option value="pending">Pending</option>
+                                                            <option value="in_review">In Review</option>
+                                                            <option value="completed">Completed</option>
+                                                        </select>
+                                                    )}
+                                                </div>
                                             </td>
 
                                             {/* Username */}
@@ -521,18 +697,35 @@ export default function AdminDashboard() {
                                                 </div>
                                             </td>
 
-                                            {/* View Details button */}
-                                            <td className="py-3.5 px-4 text-center">
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setSelectedSubmission(record);
-                                                    }}
-                                                    className="px-3 py-1.5 bg-slate-50 hover:bg-slate-200 text-[#2856C3] hover:text-blue-800 rounded-lg border border-slate-300 text-xs font-bold cursor-pointer transition-colors shadow-2xs"
-                                                >
-                                                    View Details
-                                                </button>
+                                            {/* View / Chat / Track buttons */}
+                                            <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                                                <div className="flex flex-col items-stretch gap-1.5 min-w-[120px]">
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setSelectedSubmission(record);
+                                                        }}
+                                                        className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-200 text-[#2856C3] hover:text-blue-800 rounded-lg border border-slate-300 text-[11px] font-bold cursor-pointer transition-colors shadow-2xs"
+                                                    >
+                                                        View Details
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            openChat(record);
+                                                        }}
+                                                        disabled={!record.trackingId}
+                                                        className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg border border-emerald-200 text-[11px] font-bold cursor-pointer transition-colors flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        title="Open chat with the user"
+                                                    >
+                                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.395-3.72A7.96 7.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                                        </svg>
+                                                        Messages
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -566,12 +759,78 @@ export default function AdminDashboard() {
 
                             {/* Modal Body (Scrollable) */}
                             <div className="p-6 space-y-4 text-sm text-slate-800 overflow-y-auto">
+                                {/* Status banner */}
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                                    <div className="flex items-center gap-2">
+                                        <span
+                                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full border ${STATUS_BADGE[selectedSubmission.status]}`}
+                                        >
+                                            <span
+                                                className={`w-1.5 h-1.5 rounded-full ${
+                                                    selectedSubmission.status === 'completed'
+                                                        ? 'bg-emerald-600'
+                                                        : selectedSubmission.status === 'in_review'
+                                                        ? 'bg-blue-600'
+                                                        : 'bg-amber-500'
+                                                }`}
+                                            />
+                                            {STATUS_LABEL[selectedSubmission.status]}
+                                        </span>
+                                        {selectedSubmission.status === 'completed' && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded border bg-slate-100 text-slate-700 border-slate-200">
+                                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                </svg>
+                                                Locked for user edits
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {selectedSubmission.status === 'completed' ? (
+                                        <span className="text-[11px] text-slate-500 font-semibold">
+                                            To re-open, toggle status back to “In Review”.
+                                        </span>
+                                    ) : (
+                                        <div className="flex items-center gap-2">
+                                            <label
+                                                htmlFor="status-select"
+                                                className="text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                                            >
+                                                Set Status
+                                            </label>
+                                            <select
+                                                id="status-select"
+                                                value={selectedSubmission.status}
+                                                disabled={updatingStatusFor === selectedSubmission.id}
+                                                onChange={(e) =>
+                                                    updateStatus(
+                                                        selectedSubmission,
+                                                        e.target.value as RegistrationStatus,
+                                                    )
+                                                }
+                                                className="text-xs font-semibold rounded border border-slate-300 bg-white text-slate-800 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#2856C3] focus:border-[#2856C3] cursor-pointer disabled:opacity-50"
+                                            >
+                                                <option value="pending">Pending</option>
+                                                <option value="in_review">In Review</option>
+                                                <option value="completed">Completed</option>
+                                            </select>
+                                        </div>
+                                    )}
+                                </div>
+
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="col-span-2">
                                         <span className="text-slate-500 block uppercase tracking-wider text-[10px] font-bold">Full Name</span>
                                         <strong className="text-base text-slate-900 font-bold block">{selectedSubmission.fullName}</strong>
                                     </div>
-                                    
+
+                                    <div>
+                                        <span className="text-slate-500 block uppercase tracking-wider text-[10px] font-bold">Tracking ID</span>
+                                        <span className="font-mono font-bold text-slate-900 block text-sm">
+                                            {selectedSubmission.trackingId || '—'}
+                                        </span>
+                                    </div>
+
                                     <div>
                                         <span className="text-slate-500 block uppercase tracking-wider text-[10px] font-bold">Staff ID No.</span>
                                         <strong className="font-mono text-slate-900 block font-bold">{selectedSubmission.staffId}</strong>
@@ -581,6 +840,13 @@ export default function AdminDashboard() {
                                         <span className="text-slate-500 block uppercase tracking-wider text-[10px] font-bold">Role</span>
                                         <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 text-[#2856C3] font-bold rounded inline-block text-[11px] mt-0.5 capitalize">
                                             {selectedSubmission.role}
+                                        </span>
+                                    </div>
+
+                                    <div>
+                                        <span className="text-slate-500 block uppercase tracking-wider text-[10px] font-bold">Email</span>
+                                        <span className="text-slate-800 font-mono text-xs block">
+                                            {selectedSubmission.email || '—'}
                                         </span>
                                     </div>
 
@@ -715,15 +981,33 @@ export default function AdminDashboard() {
                             </div>
 
                             {/* Modal Footer */}
-                            <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-between items-center text-[11px] text-slate-500">
+                            <div className="bg-slate-50 p-4 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-2 text-[11px] text-slate-500">
                                 <span>Record Reference: UI-REC-{selectedSubmission.id}</span>
-                                <button
-                                    type="button"
-                                    onClick={() => setSelectedSubmission(null)}
-                                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg transition-colors cursor-pointer text-xs"
-                                >
-                                    Dismiss
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (!selectedSubmission.trackingId) {
+                                                showNotification('error', 'Tracking ID is missing for this record.');
+                                                return;
+                                            }
+                                            openChat(selectedSubmission);
+                                        }}
+                                        className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors cursor-pointer text-xs flex items-center gap-1.5"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.395-3.72A7.96 7.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                        </svg>
+                                        Messages / Chat
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedSubmission(null)}
+                                        className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg transition-colors cursor-pointer text-xs"
+                                    >
+                                        Dismiss
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -820,6 +1104,75 @@ export default function AdminDashboard() {
                                 >
                                     Close Preview
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                {/* Chat Drawer (right-side slide-in panel) */}
+                {chatDrawerOpen && chatTarget && (
+                    <div className="fixed inset-0 z-50 flex justify-end animate-fadeIn" role="dialog" aria-modal="true">
+                        {/* Backdrop */}
+                        <div
+                            className="absolute inset-0 bg-slate-950/60 backdrop-blur-xs"
+                            onClick={closeChat}
+                        />
+
+                        {/* Drawer panel */}
+                        <div className="relative w-full max-w-md h-full bg-white border-l border-slate-200 shadow-2xl flex flex-col z-10 animate-scaleUp">
+                            <div className="bg-[#2856C3] text-white p-4 sm:p-5 flex justify-between items-start gap-2">
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-blue-100">Support Conversation</p>
+                                    <h3 className="font-bold font-serif text-white text-base truncate">
+                                        {chatTarget.fullName}
+                                    </h3>
+                                    <p className="text-[11px] text-blue-100 font-mono truncate">{chatTarget.trackingId}</p>
+                                    <div className="mt-1.5 flex items-center gap-2">
+                                        <span
+                                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full border bg-white/10 border-white/30 text-white`}
+                                        >
+                                            {STATUS_LABEL[chatTarget.status]}
+                                        </span>
+                                        {chatTarget.status === 'completed' && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded border bg-white/10 border-white/30 text-white">
+                                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                </svg>
+                                                Locked
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={closeChat}
+                                    className="text-white/80 hover:text-white font-bold text-sm bg-white/10 hover:bg-white/20 px-2.5 py-1 rounded transition-colors cursor-pointer flex-shrink-0"
+                                    aria-label="Close chat drawer"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-3 sm:p-4 bg-slate-50/40">
+                                {chatLoading ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-500 py-10">
+                                        <svg className="animate-spin h-7 w-7 text-[#2856C3] mb-2" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                        </svg>
+                                        <p className="text-xs font-semibold text-slate-700">Loading conversation…</p>
+                                    </div>
+                                ) : chatError ? (
+                                    <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg p-3 text-xs font-semibold">
+                                        {chatError}
+                                    </div>
+                                ) : (
+                                    <ChatThread
+                                        key={chatTarget.trackingId}
+                                        trackingId={chatTarget.trackingId}
+                                        initialMessages={chatMessages}
+                                        isAdminView
+                                    />
+                                )}
                             </div>
                         </div>
                     </div>

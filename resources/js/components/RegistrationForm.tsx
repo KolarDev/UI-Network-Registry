@@ -1,4 +1,6 @@
-import React, { useState, useRef, DragEvent, ChangeEvent } from 'react';
+import React, { useState, useRef, useEffect, DragEvent, ChangeEvent } from 'react';
+import ImagePreviewModal from './ImagePreviewModal';
+import type { TrackedRegistration } from './TrackingLookup';
 
 // ==========================================
 // 1. TypeScript Interfaces
@@ -40,36 +42,74 @@ export interface ValidationErrors {
     payslipFile?: string;
 }
 
-export default function RegistrationForm() {
+export default function RegistrationForm({
+    editRegistration = null,
+    onCancelEdit,
+    onEditSaved,
+    highlightTrackingId = null,
+    onTrackingRegistered,
+}: {
+    editRegistration?: TrackedRegistration | null;
+    onCancelEdit?: () => void;
+    onEditSaved?: () => void;
+    highlightTrackingId?: string | null;
+    onTrackingRegistered?: (trackingId: string) => void;
+} = {}) {
     // ==========================================
     // 2. State & References
     // ==========================================
+    const isEditMode = !!editRegistration;
     const [currentStep, setCurrentStep] = useState<number>(0);
-    const [formData, setFormData] = useState<RegistrationFormData>({
-        role: '',
-        fullName: '',
-        staffId: '',
-        designation: '',
-        phone: '',
-        faculty: '',
-        department: '',
-        username: '',
-        password: '',
-        passwordConfirmation: '',
-        salaryDeductionAuthorized: false,
-        staffIdFile: null,
-        payslipFile: null,
+    const [formData, setFormData] = useState<RegistrationFormData>(() => {
+        if (editRegistration) {
+            return {
+                role: (editRegistration.role as RegistrationFormData['role']) || '',
+                fullName: editRegistration.full_name || '',
+                staffId: editRegistration.staff_id || '',
+                designation: (editRegistration.designation as RegistrationFormData['designation']) || '',
+                phone: editRegistration.phone || '',
+                faculty: editRegistration.faculty || '',
+                department: editRegistration.department || '',
+                username: editRegistration.username || '',
+                password: '',
+                passwordConfirmation: '',
+                salaryDeductionAuthorized: !!editRegistration.salary_deduction_authorized,
+                staffIdFile: null,
+                payslipFile: null,
+            };
+        }
+        return {
+            role: '',
+            fullName: '',
+            staffId: '',
+            designation: '',
+            phone: '',
+            faculty: '',
+            department: '',
+            username: '',
+            password: '',
+            passwordConfirmation: '',
+            salaryDeductionAuthorized: false,
+            staffIdFile: null,
+            payslipFile: null,
+        };
     });
 
     const [errors, setErrors] = useState<ValidationErrors>({});
     const [showPassword, setShowPassword] = useState<boolean>(false);
+    const [showSummaryPassword, setShowSummaryPassword] = useState<boolean>(false);
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
     const [submissionResult, setSubmissionResult] = useState<{
         success: boolean;
         reference?: string;
+        trackingId?: string;
         message?: string;
         sentData?: Record<string, string>;
     } | null>(null);
+    const [previewImage, setPreviewImage] = useState<{ src: string; title: string; description?: string } | null>(null);
+    const [staffIdPreviewUrl, setStaffIdPreviewUrl] = useState<string | null>(null);
+    const [payslipPreviewUrl, setPayslipPreviewUrl] = useState<string | null>(null);
+    const [copiedTracking, setCopiedTracking] = useState<boolean>(false);
 
     // File Input Refs
     const staffIdInputRef = useRef<HTMLInputElement>(null);
@@ -79,16 +119,78 @@ export default function RegistrationForm() {
     const [isDragOverStaffId, setIsDragOverStaffId] = useState<boolean>(false);
     const [isDragOverPayslip, setIsDragOverPayslip] = useState<boolean>(false);
 
+    // Object URL previews for selected image files
+    useEffect(() => {
+        if (!formData.staffIdFile) {
+            setStaffIdPreviewUrl(null);
+            return;
+        }
+        const url = URL.createObjectURL(formData.staffIdFile);
+        setStaffIdPreviewUrl(url);
+        return () => URL.revokeObjectURL(url);
+    }, [formData.staffIdFile]);
+
+    useEffect(() => {
+        if (!formData.payslipFile) {
+            setPayslipPreviewUrl(null);
+            return;
+        }
+        const url = URL.createObjectURL(formData.payslipFile);
+        setPayslipPreviewUrl(url);
+        return () => URL.revokeObjectURL(url);
+    }, [formData.payslipFile]);
+
+    const openStaffIdPreview = () => {
+        if (staffIdPreviewUrl) {
+            setPreviewImage({
+                src: staffIdPreviewUrl,
+                title: 'Staff ID Card',
+                description: formData.staffIdFile?.name,
+            });
+        }
+    };
+
+    const openPayslipPreview = () => {
+        if (payslipPreviewUrl) {
+            setPreviewImage({
+                src: payslipPreviewUrl,
+                title: 'Recent Payslip',
+                description: formData.payslipFile?.name,
+            });
+        }
+    };
+
+    const copyTrackingId = async (id: string) => {
+        try {
+            if (navigator?.clipboard?.writeText) {
+                await navigator.clipboard.writeText(id);
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = id;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            }
+            setCopiedTracking(true);
+            setTimeout(() => setCopiedTracking(false), 2000);
+        } catch {
+            // ignore
+        }
+    };
+
     // ==========================================
     // 3. Validation Logic
     // ==========================================
     const validateUsername = (val: string): boolean => {
-        return val.trim().length > 0 && val === val.toLowerCase();
+        return /^[a-z0-9._-]+$/.test(val.trim());
     };
 
     const validateStaffId = (val: string): boolean => {
         const regex = /^UI\/STF\/\d+$/;
-        return regex.test(val);
+        return regex.test(val.trim());
     };
 
     const validatePhone = (val: string): boolean => {
@@ -129,13 +231,13 @@ export default function RegistrationForm() {
                 newErrors.fullName = 'Name must be at least 3 characters.';
             }
 
-            if (!formData.staffId) {
+            if (!formData.staffId.trim()) {
                 newErrors.staffId = 'Staff ID No. is required.';
             } else if (!validateStaffId(formData.staffId)) {
                 newErrors.staffId = 'Invalid format. Use "UI/STF/[Numbers]" (e.g., UI/STF/1234).';
             }
 
-            if (!formData.phone) {
+            if (!formData.phone.trim()) {
                 newErrors.phone = 'Phone number is required.';
             } else if (!validatePhone(formData.phone)) {
                 newErrors.phone = 'Invalid phone number. Must be a valid Nigerian number (e.g. 08031234567).';
@@ -170,39 +272,65 @@ export default function RegistrationForm() {
         }
 
         if (step === 2) {
-            if (!formData.username.trim()) {
-                newErrors.username = 'Preferred Username is required.';
-            } else if (!validateUsername(formData.username)) {
-                newErrors.username = 'Username must be lowercase.';
-            }
+            if (!isEditMode) {
+                if (!formData.username.trim()) {
+                    newErrors.username = 'Preferred Username is required.';
+                } else if (!validateUsername(formData.username)) {
+                    newErrors.username = 'Username must contain only lowercase letters, numbers, dots, hyphens, and underscores.';
+                }
 
-            if (!formData.password) {
-                newErrors.password = 'Password is required.';
-            } else if (formData.password.length < 8) {
-                newErrors.password = 'Password must be at least 8 characters.';
-            }
+                if (!formData.password) {
+                    newErrors.password = 'Password is required.';
+                } else if (formData.password.length < 8) {
+                    newErrors.password = 'Password must be at least 8 characters.';
+                }
 
-            if (formData.password !== formData.passwordConfirmation) {
-                newErrors.passwordConfirmation = 'Passwords do not match.';
+                if (formData.password !== formData.passwordConfirmation) {
+                    newErrors.passwordConfirmation = 'Passwords do not match.';
+                }
             }
         }
 
         if (step === 3) {
-            if (!formData.salaryDeductionAuthorized) {
+            if (!isEditMode && !formData.salaryDeductionAuthorized) {
                 newErrors.salaryDeductionAuthorized = 'You must authorize the salary deduction to proceed.';
             }
 
-            if (!formData.staffIdFile) {
+            if (!isEditMode && !formData.staffIdFile) {
                 newErrors.staffIdFile = 'Staff ID card photocopy is required.';
             }
 
-            if (!formData.payslipFile) {
+            if (!isEditMode && !formData.payslipFile) {
                 newErrors.payslipFile = 'Recent payslip photocopy is required.';
             }
         }
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
+    };
+
+    const validateAllSteps = (): boolean => {
+        const isStep0Valid = validateStep(0);
+        if (!isStep0Valid) {
+            setCurrentStep(0);
+            return false;
+        }
+        const isStep1Valid = validateStep(1);
+        if (!isStep1Valid) {
+            setCurrentStep(1);
+            return false;
+        }
+        const isStep2Valid = validateStep(2);
+        if (!isStep2Valid) {
+            setCurrentStep(2);
+            return false;
+        }
+        const isStep3Valid = validateStep(3);
+        if (!isStep3Valid) {
+            setCurrentStep(3);
+            return false;
+        }
+        return true;
     };
 
     // ==========================================
@@ -282,11 +410,11 @@ export default function RegistrationForm() {
                 return;
             }
 
-            const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];
+            const allowedTypes = ['image/jpeg', 'image/png'];
             if (!allowedTypes.includes(file.type)) {
                 setErrors((prev) => ({
                     ...prev,
-                    [fieldName]: 'Only JPEG, PNG, or PDF files are accepted.',
+                    [fieldName]: 'Only JPEG or PNG images are accepted.',
                 }));
                 return;
             }
@@ -314,24 +442,33 @@ export default function RegistrationForm() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!validateStep(3)) return;
+        if (!validateAllSteps()) return;
 
         setIsSubmitting(true);
         setErrors({});
+        setSubmissionResult(null);
 
         try {
+            const isUpdate = isEditMode && editRegistration;
+            const url = isUpdate ? `/api/registrations/${editRegistration!.id}` : '/api/register';
+            const method = isUpdate ? 'PUT' : 'POST';
+
             const submissionData = new FormData();
-            
+
             submissionData.append('role', formData.role);
             submissionData.append('fullName', formData.fullName.trim());
-            submissionData.append('staffId', formData.staffId);
+            submissionData.append('staffId', formData.staffId.trim());
             submissionData.append('designation', formData.role === 'staff' ? formData.designation : '');
             submissionData.append('phone', formData.phone.trim());
             submissionData.append('faculty', ['staff', 'dean', 'hod'].includes(formData.role) ? formData.faculty.trim() : '');
             submissionData.append('department', ['staff', 'hod', 'director'].includes(formData.role) ? formData.department.trim() : '');
-            submissionData.append('username', formData.username);
-            submissionData.append('password', formData.password);
-            submissionData.append('salaryDeductionAuthorized', formData.salaryDeductionAuthorized ? '1' : '0');
+            if (!isUpdate) {
+                submissionData.append('username', formData.username.trim());
+                submissionData.append('password', formData.password);
+                submissionData.append('salaryDeductionAuthorized', formData.salaryDeductionAuthorized ? '1' : '0');
+            } else {
+                submissionData.append('salaryDeductionAuthorized', formData.salaryDeductionAuthorized ? '1' : '0');
+            }
 
             if (formData.staffIdFile) {
                 submissionData.append('staffIdFile', formData.staffIdFile);
@@ -340,35 +477,60 @@ export default function RegistrationForm() {
                 submissionData.append('payslipFile', formData.payslipFile);
             }
 
-            const response = await fetch('/api/register', {
-                method: 'POST',
+            const response = await fetch(url, {
+                method,
                 body: submissionData,
                 headers: {
                     'Accept': 'application/json',
                 }
             });
 
-            const result = await response.json();
+            let result: any = null;
+            try {
+                result = await response.json();
+            } catch (jsonErr) {
+                throw new Error(`Server returned an invalid response (HTTP ${response.status} ${response.statusText || 'Error'}). Please try again.`);
+            }
 
-            if (response.ok && result.success) {
+            if (response.ok && (result?.success || isUpdate)) {
+                if (isUpdate) {
+                    setSubmissionResult({
+                        success: true,
+                        message: result?.message || 'Your application has been updated successfully.',
+                        trackingId: editRegistration!.tracking_id,
+                    });
+                    setCurrentStep(5);
+                    if (onEditSaved) onEditSaved();
+                } else {
+                    const trackingId = result.tracking_id || result.reference;
+                    setSubmissionResult({
+                        success: true,
+                        reference: result.reference,
+                        trackingId,
+                        message: result.message,
+                        sentData: result.sentData,
+                    });
+                    setCurrentStep(5);
+                    if (trackingId && onTrackingRegistered) {
+                        onTrackingRegistered(trackingId);
+                    }
+                }
+            } else if (response.status === 403) {
                 setSubmissionResult({
-                    success: true,
-                    reference: result.reference,
-                    message: result.message,
-                    sentData: result.sentData,
+                    success: false,
+                    message: result?.message || 'This application is locked and can no longer be edited.',
                 });
-                setCurrentStep(5);
             } else {
-                if (result.errors) {
+                if (result?.errors && typeof result.errors === 'object') {
                     const validationErrors: ValidationErrors = {};
                     Object.keys(result.errors).forEach((key) => {
                         const messages = result.errors[key];
-                        validationErrors[key as keyof ValidationErrors] = Array.isArray(messages) ? messages[0] : messages;
+                        validationErrors[key as keyof ValidationErrors] = Array.isArray(messages) ? messages[0] : String(messages);
                     });
                     setErrors(validationErrors);
 
-                    // Redirect back to the step with errors
-                    if (result.errors.role) {
+                    // Redirect back to the first step containing errors
+                    if (validationErrors.role) {
                         setCurrentStep(0);
                     } else if (
                         validationErrors.fullName ||
@@ -391,16 +553,19 @@ export default function RegistrationForm() {
                     
                     setSubmissionResult({
                         success: false,
-                        message: 'Validation failed. Please correct the highlighted errors.',
+                        message: result.message || 'Validation failed. Please correct the highlighted errors.',
                     });
                 } else {
-                    throw new Error(result.message || 'A network error occurred while submitting your registration.');
+                    setSubmissionResult({
+                        success: false,
+                        message: result?.message || `Submission failed with status ${response.status}. Please check your inputs.`,
+                    });
                 }
             }
         } catch (err: any) {
             setSubmissionResult({
                 success: false,
-                message: err.message || 'A network error occurred while submitting your registration. Please try again.',
+                message: err?.message || 'A network error occurred while submitting your registration. Please try again.',
             });
         } finally {
             setIsSubmitting(false);
@@ -493,14 +658,38 @@ export default function RegistrationForm() {
 
             {/* Main Form Content */}
             <div className="p-6 sm:p-8 md:p-10">
+                {/* Submission Error Banner */}
+                {submissionResult && !submissionResult.success && currentStep < 5 && (
+                    <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-red-800 animate-fadeIn">
+                        <div className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <div className="flex-1">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-red-900">Submission Error</h4>
+                            <p className="text-xs font-medium mt-0.5 text-red-700 leading-relaxed">{submissionResult.message}</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setSubmissionResult(null)}
+                            className="text-red-400 hover:text-red-700 text-sm font-bold leading-none p-1 cursor-pointer"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                )}
+
                 {currentStep === 0 && (
                     <div className="space-y-8 animate-fadeIn">
                         <div className="text-center max-w-2xl mx-auto space-y-2">
                             <h3 className="text-2xl font-extrabold text-slate-900 font-serif tracking-tight">
-                                Select Your Institutional Role
+                                {isEditMode ? 'Edit Institutional Role' : 'Select Your Institutional Role'}
                             </h3>
                             <p className="text-slate-500 text-sm">
-                                Please select your primary organizational role to customize the network registry application flow.
+                                {isEditMode
+                                    ? 'You can review and update your role below before continuing.'
+                                    : 'Please select your primary organizational role to customize the network registry application flow.'}
                             </p>
                         </div>
 
@@ -1083,32 +1272,61 @@ export default function RegistrationForm() {
                                         type="file"
                                         ref={staffIdInputRef}
                                         onChange={(e) => handleFileChange(e, 'staffIdFile')}
-                                        accept="image/jpeg,image/png,application/pdf"
+                                        accept="image/jpeg,image/png"
                                         className="hidden"
                                     />
 
                                     {formData.staffIdFile ? (
                                         <div className="space-y-3 w-full" onClick={(e) => e.stopPropagation()}>
-                                            <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mx-auto border border-emerald-200">
-                                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={openStaffIdPreview}
+                                                className="block mx-auto group relative w-24 h-24 rounded-xl overflow-hidden border-2 border-emerald-200 shadow-sm hover:border-[#2856C3] hover:shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-[#2856C3]/30"
+                                                title="Click to preview"
+                                            >
+                                                {staffIdPreviewUrl ? (
+                                                    <img
+                                                        src={staffIdPreviewUrl}
+                                                        alt="Staff ID preview"
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                ) : (
+                                                    <div className="w-full h-full bg-emerald-50 flex items-center justify-center text-emerald-600">
+                                                        <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                        </svg>
+                                                    </div>
+                                                )}
+                                                <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/40 transition-colors flex items-center justify-center">
+                                                    <svg className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+                                                    </svg>
+                                                </div>
+                                            </button>
                                             <div>
                                                 <p className="text-sm font-semibold text-slate-800 truncate max-w-xs mx-auto">
                                                     {formData.staffIdFile.name}
                                                 </p>
                                                 <p className="text-xs text-slate-400 mt-0.5">
-                                                    {(formData.staffIdFile.size / 1024 / 1024).toFixed(2)} MB
+                                                    {(formData.staffIdFile.size / 1024 / 1024).toFixed(2)} MB · Click thumbnail to preview
                                                 </p>
                                             </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => removeFile('staffIdFile')}
-                                                className="px-3 py-1 bg-red-50 text-red-550 border border-red-200 hover:bg-red-100 rounded-lg text-xs font-semibold tracking-wide transition-all duration-205"
-                                            >
-                                                Remove File
-                                            </button>
+                                            <div className="flex items-center justify-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={openStaffIdPreview}
+                                                    className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 rounded-lg text-xs font-semibold tracking-wide transition-colors"
+                                                >
+                                                    Preview
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeFile('staffIdFile')}
+                                                    className="px-3 py-1 bg-red-50 text-red-550 border border-red-200 hover:bg-red-100 rounded-lg text-xs font-semibold tracking-wide transition-colors"
+                                                >
+                                                    Remove File
+                                                </button>
+                                            </div>
                                         </div>
                                     ) : (
                                         <div className="space-y-2 pointer-events-none">
@@ -1122,7 +1340,7 @@ export default function RegistrationForm() {
                                                 Drag & drop or <span className="text-ui-blue font-bold">browse</span>
                                             </p>
                                             <p className="text-[10px] text-slate-400">
-                                                Photocopy of Staff ID card (JPEG, PNG, PDF up to 5MB)
+                                                Photocopy of Staff ID card (JPEG or PNG, up to 5MB)
                                             </p>
                                         </div>
                                     )}
@@ -1157,32 +1375,61 @@ export default function RegistrationForm() {
                                         type="file"
                                         ref={payslipInputRef}
                                         onChange={(e) => handleFileChange(e, 'payslipFile')}
-                                        accept="image/jpeg,image/png,application/pdf"
+                                        accept="image/jpeg,image/png"
                                         className="hidden"
                                     />
 
                                     {formData.payslipFile ? (
                                         <div className="space-y-3 w-full" onClick={(e) => e.stopPropagation()}>
-                                            <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mx-auto border border-emerald-200">
-                                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={openPayslipPreview}
+                                                className="block mx-auto group relative w-24 h-24 rounded-xl overflow-hidden border-2 border-emerald-200 shadow-sm hover:border-[#2856C3] hover:shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-[#2856C3]/30"
+                                                title="Click to preview"
+                                            >
+                                                {payslipPreviewUrl ? (
+                                                    <img
+                                                        src={payslipPreviewUrl}
+                                                        alt="Payslip preview"
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                ) : (
+                                                    <div className="w-full h-full bg-emerald-50 flex items-center justify-center text-emerald-600">
+                                                        <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                        </svg>
+                                                    </div>
+                                                )}
+                                                <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/40 transition-colors flex items-center justify-center">
+                                                    <svg className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+                                                    </svg>
+                                                </div>
+                                            </button>
                                             <div>
                                                 <p className="text-sm font-semibold text-slate-800 truncate max-w-xs mx-auto">
                                                     {formData.payslipFile.name}
                                                 </p>
                                                 <p className="text-xs text-slate-400 mt-0.5">
-                                                    {(formData.payslipFile.size / 1024 / 1024).toFixed(2)} MB
+                                                    {(formData.payslipFile.size / 1024 / 1024).toFixed(2)} MB · Click thumbnail to preview
                                                 </p>
                                             </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => removeFile('payslipFile')}
-                                                className="px-3 py-1 bg-red-50 text-red-550 border border-red-200 hover:bg-red-100 rounded-lg text-xs font-semibold tracking-wide transition-all duration-205"
-                                            >
-                                                Remove File
-                                            </button>
+                                            <div className="flex items-center justify-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={openPayslipPreview}
+                                                    className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 rounded-lg text-xs font-semibold tracking-wide transition-colors"
+                                                >
+                                                    Preview
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeFile('payslipFile')}
+                                                    className="px-3 py-1 bg-red-50 text-red-550 border border-red-200 hover:bg-red-100 rounded-lg text-xs font-semibold tracking-wide transition-colors"
+                                                >
+                                                    Remove File
+                                                </button>
+                                            </div>
                                         </div>
                                     ) : (
                                         <div className="space-y-2 pointer-events-none">
@@ -1195,7 +1442,7 @@ export default function RegistrationForm() {
                                                 Drag & drop or <span className="text-ui-blue font-bold">browse</span>
                                             </p>
                                             <p className="text-[10px] text-slate-400">
-                                                Photocopy of recent official payslip (JPEG, PNG, PDF up to 5MB)
+                                                Photocopy of recent official payslip (JPEG or PNG, up to 5MB)
                                             </p>
                                         </div>
                                     )}
@@ -1217,6 +1464,17 @@ export default function RegistrationForm() {
                             </h3>
                             <p className="text-slate-500 text-sm mt-1">Verify all registration details before finalizing submission to the ITMS Network Unit.</p>
                         </div>
+
+                        {isEditMode && editRegistration && (
+                            <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center gap-3 text-blue-900">
+                                <svg className="w-5 h-5 text-blue-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                <div className="text-xs font-medium leading-relaxed">
+                                    Editing existing application <span className="font-mono font-bold tracking-wider">{editRegistration.tracking_id}</span>. Documents and password remain unchanged unless replaced.
+                                </div>
+                            </div>
+                        )}
 
                         {/* Review Sections */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-55/60 border border-slate-200/80 rounded-2xl p-6 sm:p-8">
@@ -1288,9 +1546,35 @@ export default function RegistrationForm() {
                                         <span className="text-slate-400">Preferred Username:</span>
                                         <span className="text-ui-blue font-bold font-mono">@{formData.username}</span>
                                     </div>
-                                    <div className="flex justify-between py-1 border-b border-slate-100">
+                                    <div className="flex justify-between items-center py-1 border-b border-slate-100">
                                         <span className="text-slate-400">Initial Password:</span>
-                                        <span className="text-slate-500 font-mono">•••••••• (Hidden)</span>
+                                        <span className="flex items-center gap-2">
+                                            <span className="text-slate-500 font-mono">
+                                                {!formData.password
+                                                    ? '•••••••• (Hidden)'
+                                                    : showSummaryPassword
+                                                    ? formData.password
+                                                    : '••••••••'}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowSummaryPassword((v) => !v)}
+                                                className="text-slate-400 hover:text-[#2856C3] focus:outline-none focus:ring-2 focus:ring-[#2856C3]/20 rounded p-1 transition-colors"
+                                                aria-label={showSummaryPassword ? 'Hide password' : 'Show password'}
+                                                title={showSummaryPassword ? 'Hide password' : 'Show password'}
+                                            >
+                                                {showSummaryPassword ? (
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
+                                                    </svg>
+                                                ) : (
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                    </svg>
+                                                )}
+                                            </button>
+                                        </span>
                                     </div>
                                     <div className="flex justify-between py-1 border-b border-slate-100">
                                         <span className="text-slate-400">Staff ID Document:</span>
@@ -1335,16 +1619,69 @@ export default function RegistrationForm() {
                             <p className="text-sm text-slate-500 max-w-md mx-auto">{submissionResult.message}</p>
                         </div>
 
-                        {/* Submission Ticket Badge */}
-                        <div className="max-w-md mx-auto bg-slate-50 border border-slate-200 rounded-2xl p-6 space-y-4 text-left shadow-sm relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
-                            
-                            <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-                                <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">Application Reference</span>
-                                <span className="text-sm font-mono font-bold text-ui-gold tracking-wider">{submissionResult.reference}</span>
+                        {/* Tracking ID Callout */}
+                        {submissionResult.trackingId && (
+                            <div className="max-w-md mx-auto bg-gradient-to-br from-[#2856C3] to-blue-800 text-white rounded-2xl p-6 shadow-lg relative overflow-hidden">
+                                <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+                                <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-ui-gold/20 rounded-full blur-2xl pointer-events-none" />
+                                <div className="relative space-y-3">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <svg className="w-4 h-4 text-ui-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 7h2a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2V9a2 2 0 012-2h2m2-2h6a2 2 0 012 2v2H7V5a2 2 0 012-2zm0 0V3m0 2h6m-6 0H7" />
+                                        </svg>
+                                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-100">Your Tracking ID</p>
+                                    </div>
+                                    <p className="font-mono text-3xl sm:text-4xl font-extrabold tracking-[0.15em] text-white select-all">
+                                        {submissionResult.trackingId}
+                                    </p>
+                                    <p className="text-[11px] text-blue-100 max-w-xs mx-auto leading-relaxed">
+                                        Save this ID. Use it on the homepage to track your application status, edit your details, and chat with ITMS.
+                                    </p>
+                                    <div className="flex flex-col sm:flex-row gap-2 justify-center pt-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => copyTrackingId(submissionResult.trackingId!)}
+                                            className="px-4 py-2 bg-white text-[#2856C3] hover:bg-slate-50 rounded-lg text-xs font-bold tracking-wide shadow-sm transition-colors flex items-center justify-center gap-1.5"
+                                        >
+                                            {copiedTracking ? (
+                                                <>
+                                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                    Copied!
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                    </svg>
+                                                    Copy Tracking ID
+                                                </>
+                                            )}
+                                        </button>
+                                        {highlightTrackingId && (
+                                            <span className="px-3 py-2 text-[11px] text-blue-100 font-medium inline-flex items-center justify-center gap-1.5">
+                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                                </svg>
+                                                Dashboard loaded below
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
-                            
-                            {submissionResult.sentData && (
+                        )}
+
+                        {/* Submission Ticket Badge */}
+                        {submissionResult.sentData && (
+                            <div className="max-w-md mx-auto bg-slate-50 border border-slate-200 rounded-2xl p-6 space-y-4 text-left shadow-sm relative overflow-hidden">
+                                <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
+
+                                <div className="flex justify-between items-center border-b border-slate-200 pb-3">
+                                    <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">Application Reference</span>
+                                    <span className="text-sm font-mono font-bold text-ui-gold tracking-wider">{submissionResult.reference || '—'}</span>
+                                </div>
+
                                 <div className="space-y-2.5 text-xs text-slate-650">
                                     <div className="flex justify-between">
                                         <span>Registrant:</span>
@@ -1369,8 +1706,8 @@ export default function RegistrationForm() {
                                         </span>
                                     </div>
                                 </div>
-                            )}
-                        </div>
+                            </div>
+                        )}
 
                         {/* Print Receipt & Reset Options */}
                         <div className="flex flex-col sm:flex-row justify-center gap-4 pt-4">
@@ -1397,21 +1734,33 @@ export default function RegistrationForm() {
 
                 {/* Bottom Navigation Buttons */}
                 {currentStep <= 4 && (
-                    <div className="flex flex-col-reverse sm:flex-row gap-4 justify-between items-center pt-8 mt-8 border-t border-slate-300">
-                        {currentStep > 0 ? (
-                            <button
-                                type="button"
-                                onClick={handleBack}
-                                className="w-full sm:w-auto px-5 py-3 bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 rounded-xl text-sm font-bold tracking-wide transition-all duration-200 border border-slate-300 flex items-center justify-center gap-2 group cursor-pointer"
-                            >
-                                <svg className="w-4 h-4 transform group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                                </svg>
-                                Back
-                            </button>
-                        ) : (
-                            <div className="hidden sm:block w-1" />
-                        )}
+                    <div className="flex flex-col-reverse sm:flex-row gap-3 justify-between items-center pt-8 mt-8 border-t border-slate-300">
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                            {currentStep > 0 ? (
+                                <button
+                                    type="button"
+                                    onClick={handleBack}
+                                    className="px-5 py-3 bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 rounded-xl text-sm font-bold tracking-wide transition-all duration-200 border border-slate-300 flex items-center justify-center gap-2 group cursor-pointer"
+                                >
+                                    <svg className="w-4 h-4 transform group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                    Back
+                                </button>
+                            ) : (
+                                <div className="hidden sm:block w-1" />
+                            )}
+
+                            {isEditMode && onCancelEdit && (
+                                <button
+                                    type="button"
+                                    onClick={onCancelEdit}
+                                    className="px-5 py-3 bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 rounded-xl text-sm font-bold tracking-wide transition-all duration-200 border border-slate-300 flex items-center justify-center gap-2 cursor-pointer"
+                                >
+                                    Cancel
+                                </button>
+                            )}
+                        </div>
 
                         {currentStep < 4 ? (
                             <button
@@ -1437,13 +1786,13 @@ export default function RegistrationForm() {
                                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                                         </svg>
-                                        Submitting Application...
+                                        {isEditMode ? 'Saving Changes...' : 'Submitting Application...'}
                                     </>
                                 ) : (
                                     <>
-                                        Submit Registration
+                                        {isEditMode ? 'Save Changes' : 'Submit Registration'}
                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                         </svg>
                                     </>
                                 )}
@@ -1452,6 +1801,14 @@ export default function RegistrationForm() {
                     </div>
                 )}
             </div>
+
+            <ImagePreviewModal
+                open={!!previewImage}
+                src={previewImage?.src ?? null}
+                title={previewImage?.title}
+                description={previewImage?.description}
+                onClose={() => setPreviewImage(null)}
+            />
         </div>
     );
 }

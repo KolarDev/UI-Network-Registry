@@ -27,6 +27,10 @@ return new class extends Migration
             $table->boolean('salary_deduction_authorized')->default(false);
             $table->string('staff_id_file')->nullable();
             $table->string('payslip_file')->nullable();
+            // Public 8-char tracking code (e.g. UIN-7X9B2K) used by users to track status.
+            $table->string('tracking_id')->nullable()->unique()->after('staff_id_file');
+            // pending | in_review | completed
+            $table->string('status')->default('pending')->after('tracking_id');
             $table->timestamps();
         });
     }

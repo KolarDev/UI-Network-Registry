@@ -15,3 +15,15 @@ use Illuminate\Support\Facades\Route;
 
 // Public staff registration endpoint
 Route::post('/register', [RegistrationController::class, 'register']);
+
+// User tracking / chat endpoints
+Route::get('/track/{tracking_id}', [RegistrationController::class, 'track']);
+Route::post('/track/{tracking_id}/messages', [RegistrationController::class, 'postMessage']);
+
+// Editable registration update (locked once status === completed)
+Route::put('/registrations/{id}', [RegistrationController::class, 'update'])
+    ->whereNumber('id');
+
+// Admin status toggling
+Route::patch('/admin/registrations/{id}/status', [RegistrationController::class, 'updateStatus'])
+    ->whereNumber('id');
