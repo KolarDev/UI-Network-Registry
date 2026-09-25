@@ -65,10 +65,33 @@ function App(): React.JSX.Element {
     const [isTracking, setIsTracking] = useState<boolean>(false);
     const [trackingError, setTrackingError] = useState<string | null>(null);
     const [trackingNotice, setTrackingNotice] = useState<string | null>(null);
+    const [mobileNavOpen, setMobileNavOpen] = useState<boolean>(false);
 
     useEffect(() => {
         setIsAdminPath(window.location.pathname === '/ui-admin');
     }, []);
+
+    // Mobile drawer: close on Escape or when resized up to the desktop layout,
+    // and stop the page behind it from scrolling while open.
+    useEffect(() => {
+        if (!mobileNavOpen) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setMobileNavOpen(false);
+        };
+        const desktop = window.matchMedia('(min-width: 768px)');
+        const onResize = () => {
+            if (desktop.matches) setMobileNavOpen(false);
+        };
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        window.addEventListener('keydown', onKey);
+        desktop.addEventListener('change', onResize);
+        return () => {
+            document.body.style.overflow = previousOverflow;
+            window.removeEventListener('keydown', onKey);
+            desktop.removeEventListener('change', onResize);
+        };
+    }, [mobileNavOpen]);
 
     /**
      * Fetch GET /api/track/{id} and switch the main view to the results
@@ -90,6 +113,7 @@ function App(): React.JSX.Element {
             setEditingRegistration(null);
             setTrackingQuery(data.tracking_id);
             setTrackingNotice(notice);
+            setMobileNavOpen(false);
             window.scrollTo({ top: 0, behavior: 'smooth' });
             return true;
         } catch (err: any) {
@@ -142,119 +166,235 @@ function App(): React.JSX.Element {
         trackApplication(trackingId);
     };
 
+    const handleNewRegistration = () => {
+        handleCloseTracking();
+        setMobileNavOpen(false);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    /**
+     * The tracking search form. Rendered inline in the desktop header and
+     * inside the mobile drawer; both share the same state.
+     */
+    const renderTrackingForm = (variant: 'desktop' | 'drawer') => (
+        <form
+            onSubmit={handleTrackSubmit}
+            className={variant === 'desktop' ? 'flex items-center gap-2 w-full' : 'flex flex-col gap-2.5 w-full'}
+            role="search"
+            aria-label="Track an application"
+        >
+            <div className="flex-1 relative min-w-0">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+                </svg>
+                <input
+                    type="text"
+                    value={trackingQuery}
+                    onChange={(e) => {
+                        setTrackingQuery(e.target.value);
+                        if (trackingError) setTrackingError(null);
+                    }}
+                    placeholder={variant === 'desktop' ? 'Tracking ID (e.g. UIN-7X9B2K)' : 'Enter Tracking ID (e.g. UIN-7X9B2K)'}
+                    className="w-full pl-9 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono uppercase tracking-wider text-slate-800 placeholder:normal-case placeholder:tracking-normal placeholder:font-sans placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2856C3]/20 focus:border-[#2856C3] focus:bg-white transition-all"
+                    aria-label="Tracking ID"
+                    aria-invalid={!!trackingError}
+                    aria-describedby={trackingError ? `tracking-error-${variant}` : undefined}
+                    maxLength={32}
+                    autoCapitalize="characters"
+                    autoComplete="off"
+                    spellCheck={false}
+                />
+                {trackingQuery && (
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setTrackingQuery('');
+                            setTrackingError(null);
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded"
+                        aria-label="Clear tracking ID"
+                    >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                )}
+            </div>
+            {variant === 'drawer' && trackingError && (
+                <p id="tracking-error-drawer" className="text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2" role="alert">
+                    {trackingError}
+                </p>
+            )}
+            <button
+                type="submit"
+                disabled={isTracking}
+                className={`px-5 py-2.5 bg-[#2856C3] hover:bg-blue-800 text-white text-sm font-bold tracking-wide rounded-xl shadow-sm transition-colors disabled:opacity-60 flex items-center justify-center gap-2 flex-shrink-0 ${
+                    variant === 'drawer' ? 'w-full' : ''
+                }`}
+            >
+                {isTracking ? (
+                    <>
+                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Tracking...
+                    </>
+                ) : (
+                    'Track'
+                )}
+            </button>
+        </form>
+    );
+
     return (
         <ErrorBoundary>
             <div className="min-h-screen w-full bg-white text-slate-900 flex flex-col justify-between relative overflow-x-hidden font-sans">
-                {/* Top Banner (Deep Royal Blue) */}
-                <div className="w-full h-2 bg-[#2856C3]" />
+                {/* Top navigation bar */}
+                <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur border-b border-slate-200 shadow-sm">
+                    <div className="h-1 w-full bg-[#2856C3]" />
+                    <div className="max-w-7xl mx-auto h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+                        {/* Brand */}
+                        <a
+                            href={isAdminPath ? '/ui-admin' : '/'}
+                            onClick={(e) => {
+                                if (!isAdminPath) {
+                                    e.preventDefault();
+                                    handleNewRegistration();
+                                }
+                            }}
+                            className="flex items-center gap-2.5 sm:gap-3 min-w-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2856C3]/40"
+                        >
+                            <img
+                                src="/images/ui-logo.png"
+                                alt="University of Ibadan seal"
+                                className="w-10 h-10 flex-shrink-0 object-contain"
+                            />
+                            <span className="min-w-0">
+                                <span className="block text-base sm:text-lg font-bold text-slate-950 font-serif leading-tight truncate">
+                                    ITEMS Network Registry
+                                </span>
+                                <span className="block text-[10px] sm:text-[11px] font-semibold text-ui-gold uppercase tracking-wider truncate">
+                                    University of Ibadan
+                                </span>
+                            </span>
+                        </a>
 
-                {/* Main Header Area */}
-                <header className="w-full bg-white border-b border-slate-200/80 shadow-sm py-4 px-6 sm:px-8">
-                    <div className="max-w-6xl mx-auto flex flex-col gap-4">
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                            <div className="flex items-center gap-3.5">
-                                <div className="w-12 h-12 flex-shrink-0 flex items-center justify-center">
-                                    <img
-                                        src="/images/ui-logo.png"
-                                        alt="University of Ibadan Logo"
-                                        className="w-full h-full object-contain"
-                                    />
-                                </div>
-                                <div>
-                                    <h1 className="text-lg sm:text-xl font-bold text-slate-950 font-serif leading-tight">
-                                        University of Ibadan Network Service Registry
-                                    </h1>
-                                    <p className="text-xs font-semibold text-ui-gold uppercase tracking-wider">
-                                        Information Technology and Media Services (ITEMS)
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="text-xs text-slate-600 flex items-center gap-3">
-                                <span className="text-slate-500 font-medium">Support:</span>
-                                <a href="mailto:network-support@ui.edu.ng" className="hover:underline font-bold text-[#2856C3]">
-                                    network-support@ui.edu.ng
-                                </a>
-                                <span className="text-slate-300">|</span>
-                                <span className="font-semibold text-slate-700">Official Portal</span>
-                            </div>
-                        </div>
-
-                        {/* Header Tracking Bar (only on the user-facing path) */}
-                        {!isAdminPath && (
-                            <div className="pt-2 border-t border-slate-100">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#2856C3]/10 text-[#2856C3]">
-                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
-                                        </svg>
-                                    </span>
-                                    <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
-                                        Already registered? Track or edit your application below
-                                    </p>
-                                </div>
-                                <form
-                                    onSubmit={handleTrackSubmit}
-                                    className="w-full flex flex-col sm:flex-row items-stretch gap-2 sm:gap-3"
-                                    role="search"
-                                >
-                                    <div className="flex-1 relative">
-                                        <input
-                                            type="text"
-                                            value={trackingQuery}
-                                            onChange={(e) => {
-                                                setTrackingQuery(e.target.value);
-                                                if (trackingError) setTrackingError(null);
-                                            }}
-                                            placeholder="Enter Tracking ID (e.g. UIN-7X9B2K)"
-                                            className="w-full pl-3.5 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono uppercase tracking-wider text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2856C3]/20 focus:border-[#2856C3] focus:bg-white transition-all"
-                                            aria-label="Tracking ID"
-                                            aria-invalid={!!trackingError}
-                                            aria-describedby={trackingError ? 'tracking-error' : undefined}
-                                            maxLength={32}
-                                        />
-                                        {trackingQuery && (
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setTrackingQuery('');
-                                                    setTrackingError(null);
-                                                }}
-                                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded"
-                                                aria-label="Clear tracking ID"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                                </svg>
-                                            </button>
-                                        )}
-                                    </div>
-                                    <button
-                                        type="submit"
-                                        disabled={isTracking}
-                                        className="px-5 py-2.5 bg-[#2856C3] hover:bg-blue-800 text-white text-sm font-bold tracking-wide rounded-xl shadow-sm transition-colors disabled:opacity-60 flex items-center justify-center gap-2 min-w-[120px]"
+                        {isAdminPath ? (
+                            <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 text-[11px] font-bold uppercase tracking-wider rounded-full bg-[#2856C3]/10 text-[#2856C3] border border-[#2856C3]/20">
+                                Administrative Console
+                            </span>
+                        ) : (
+                            <>
+                                {/* Desktop: inline search + actions */}
+                                <div className="hidden md:flex items-center gap-3 flex-1 justify-end min-w-0">
+                                    <div className="w-full max-w-md">{renderTrackingForm('desktop')}</div>
+                                    {(trackedRegistration || editingRegistration) && (
+                                        <button
+                                            type="button"
+                                            onClick={handleNewRegistration}
+                                            className="px-3.5 py-2.5 text-sm font-bold text-slate-700 hover:text-slate-900 border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors whitespace-nowrap"
+                                        >
+                                            New Registration
+                                        </button>
+                                    )}
+                                    <a
+                                        href="mailto:network-support@ui.edu.ng"
+                                        className="p-2.5 text-slate-500 hover:text-[#2856C3] hover:bg-slate-100 rounded-xl transition-colors"
+                                        title="Email ITEMS network support"
+                                        aria-label="Email ITEMS network support"
                                     >
-                                        {isTracking ? (
-                                            <>
-                                                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                                </svg>
-                                                Tracking...
-                                            </>
-                                        ) : (
-                                            'Track'
-                                        )}
-                                    </button>
-                                </form>
-                            </div>
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                        </svg>
+                                    </a>
+                                </div>
+
+                                {/* Mobile: hamburger */}
+                                <button
+                                    type="button"
+                                    onClick={() => setMobileNavOpen(true)}
+                                    className="md:hidden p-2.5 -mr-1 text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
+                                    aria-label="Open menu"
+                                    aria-expanded={mobileNavOpen}
+                                    aria-controls="mobile-nav"
+                                >
+                                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                                    </svg>
+                                </button>
+                            </>
                         )}
                     </div>
                 </header>
 
-                {/* Tracking lookup error (e.g. unknown ID / 404), shown beneath the header */}
-                {!isAdminPath && trackingError && (
-                    <div className="w-full bg-red-50 border-b border-red-200 px-6 sm:px-8 py-3" role="alert" id="tracking-error">
+                {/* Mobile slide-over drawer (always mounted so it can animate; invisible when closed) */}
+                {!isAdminPath && (
+                    <div
+                        className={`md:hidden fixed inset-0 z-50 transition-all duration-300 ${
+                            mobileNavOpen ? 'visible' : 'invisible'
+                        }`}
+                    >
+                        <div
+                            className={`absolute inset-0 bg-slate-900/40 transition-opacity duration-300 ${
+                                mobileNavOpen ? 'opacity-100' : 'opacity-0'
+                            }`}
+                            onClick={() => setMobileNavOpen(false)}
+                            aria-hidden="true"
+                        />
+                        <nav
+                            id="mobile-nav"
+                            aria-label="Main menu"
+                            className={`absolute right-0 top-0 h-full w-[85vw] max-w-sm bg-white shadow-2xl flex flex-col transition-transform duration-300 ease-out ${
+                                mobileNavOpen ? 'translate-x-0' : 'translate-x-full'
+                            }`}
+                        >
+                            <div className="h-16 px-4 flex items-center justify-between border-b border-slate-200">
+                                <span className="text-sm font-bold text-slate-900">Menu</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setMobileNavOpen(false)}
+                                    className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg"
+                                    aria-label="Close menu"
+                                >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                                <section className="space-y-2">
+                                    <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                                        Track your application
+                                    </h2>
+                                    {renderTrackingForm('drawer')}
+                                </section>
+                                <section className="space-y-2">
+                                    <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Actions</h2>
+                                    <button
+                                        type="button"
+                                        onClick={handleNewRegistration}
+                                        className="w-full px-4 py-3 text-left text-sm font-semibold text-slate-800 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors"
+                                    >
+                                        New Registration
+                                    </button>
+                                    <a
+                                        href="mailto:network-support@ui.edu.ng"
+                                        className="block w-full px-4 py-3 text-sm font-semibold text-slate-800 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors"
+                                    >
+                                        Email support
+                                        <span className="block text-xs font-normal text-[#2856C3] mt-0.5 break-all">network-support@ui.edu.ng</span>
+                                    </a>
+                                </section>
+                            </div>
+                        </nav>
+                    </div>
+                )}
+
+                {/* Tracking lookup error (e.g. unknown ID / 404), shown beneath the header.
+                    While the mobile drawer is open the error is shown inside it instead. */}
+                {!isAdminPath && trackingError && !mobileNavOpen && (
+                    <div className="w-full bg-red-50 border-b border-red-200 px-6 sm:px-8 py-3" role="alert" id="tracking-error-desktop">
                         <div className="max-w-6xl mx-auto flex items-start gap-3 text-red-800">
                             <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -279,10 +419,10 @@ function App(): React.JSX.Element {
 
                 {/* Main View Render */}
                 <main className="w-full flex-grow flex items-start justify-center p-4 sm:p-6 md:p-8 bg-slate-50">
-                    <div className="w-full max-w-5xl space-y-6">
+                    <div className={`w-full space-y-6 ${isAdminPath && isAdminLoggedIn ? 'max-w-7xl' : 'max-w-5xl'}`}>
                         {isAdminPath ? (
                             isAdminLoggedIn ? (
-                                <AdminDashboard />
+                                <AdminDashboard onLogout={() => setIsAdminLoggedIn(false)} />
                             ) : (
                                 <AdminLogin onLoginSuccess={() => setIsAdminLoggedIn(true)} />
                             )

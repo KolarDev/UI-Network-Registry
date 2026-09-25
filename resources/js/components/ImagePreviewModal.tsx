@@ -28,14 +28,14 @@ export default function ImagePreviewModal({ open, src, title, description, onClo
         <div
             role="dialog"
             aria-modal="true"
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 bg-slate-950/70 backdrop-blur-sm animate-fadeIn"
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-8 bg-slate-950/70 backdrop-blur-sm animate-fadeIn"
             onClick={onClose}
         >
             <div
-                className="relative max-w-3xl w-full bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden"
+                className="relative w-full max-w-full sm:max-w-3xl max-h-[85vh] flex flex-col bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
             >
-                <div className="px-4 sm:px-5 py-3 border-b border-slate-200 flex items-center gap-3 bg-slate-50/60">
+                <div className="px-4 sm:px-5 py-3 border-b border-slate-200 flex items-center gap-3 bg-slate-50/60 flex-shrink-0">
                     <div className="w-8 h-8 rounded-full bg-[#2856C3]/10 text-[#2856C3] flex items-center justify-center flex-shrink-0">
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -58,11 +58,11 @@ export default function ImagePreviewModal({ open, src, title, description, onClo
                     </button>
                 </div>
 
-                <div className="bg-slate-100 flex items-center justify-center p-4 max-h-[70vh] overflow-auto">
+                <div className="bg-slate-100 flex-1 min-h-0 flex items-center justify-center p-2 sm:p-4 overflow-y-auto overflow-x-hidden">
                     <img
                         src={src}
                         alt={title ?? 'Preview'}
-                        className="max-w-full max-h-[65vh] object-contain rounded-md shadow-sm"
+                        className="max-w-full max-h-[70vh] object-contain rounded-md shadow-sm"
                     />
                 </div>
             </div>

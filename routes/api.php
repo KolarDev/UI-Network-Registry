@@ -24,6 +24,5 @@ Route::post('/track/{tracking_id}/messages', [RegistrationController::class, 'po
 Route::put('/registrations/{id}', [RegistrationController::class, 'update'])
     ->whereNumber('id');
 
-// Admin status toggling
-Route::patch('/admin/registrations/{id}/status', [RegistrationController::class, 'updateStatus'])
-    ->whereNumber('id');
+// Admin-only endpoints (status toggle, admin chat replies) live in routes/web.php:
+// they authenticate with the admin session, which this stateless group lacks.

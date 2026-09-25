@@ -54,6 +54,18 @@ class AdminExportTest extends TestCase
         $this->assertSame($expected, $ids);
     }
 
+    public function test_the_submissions_index_reports_registry_wide_status_counts(): void
+    {
+        StaffRegistration::factory(2)->create(['status' => StaffRegistration::STATUS_PENDING]);
+        StaffRegistration::factory()->create(['status' => StaffRegistration::STATUS_COMPLETED]);
+
+        $this->actingAs(User::factory()->create())
+            ->getJson('/api/admin/submissions?search=no-such-registrant')
+            ->assertOk()
+            ->assertJsonPath('total', 0)
+            ->assertJsonPath('status_counts', ['pending' => 2, 'in_review' => 0, 'completed' => 1]);
+    }
+
     public function test_the_submissions_index_exposes_contact_email(): void
     {
         StaffRegistration::factory()->create(['contact_email' => 'contact@example.com']);

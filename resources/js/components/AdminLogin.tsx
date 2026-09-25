@@ -44,6 +44,10 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                 if (result.token) {
                     sessionStorage.setItem('admin_token', result.token);
                 }
+                if (result.user) {
+                    // Shown in the dashboard header (see getAdminProfile).
+                    sessionStorage.setItem('admin_user', JSON.stringify(result.user));
+                }
                 onLoginSuccess();
             } else {
                 setError(result.message || 'Invalid administrative credentials. Please try again.');

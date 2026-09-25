@@ -45,7 +45,20 @@ class AdminSubmissionController extends Controller
         // Return standardized pagination format
         $registrations = $query->orderBy('created_at', 'desc')->paginate(10);
 
-        return response()->json($registrations);
+        // Registry-wide totals per status (unfiltered) for the dashboard counters.
+        $counts = StaffRegistration::query()
+            ->selectRaw('status, COUNT(*) as aggregate')
+            ->groupBy('status')
+            ->pluck('aggregate', 'status');
+
+        $statusCounts = [];
+        foreach (StaffRegistration::ALLOWED_STATUSES as $status) {
+            $statusCounts[$status] = (int) ($counts[$status] ?? 0);
+        }
+
+        return response()->json(array_merge($registrations->toArray(), [
+            'status_counts' => $statusCounts,
+        ]));
     }
 
     /**

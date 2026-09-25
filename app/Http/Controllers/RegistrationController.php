@@ -439,11 +439,38 @@ class RegistrationController extends Controller
     /**
      * POST /api/track/{tracking_id}/messages
      *
-     * Allows either the original registering user (identified loosely by
-     * tracking_id) or an admin to post a message with an optional image
-     * attachment.
+     * Public tracking-page endpoint. Messages posted here always come from the
+     * requester, so they are stored as sender_type "user" regardless of who
+     * is signed in.
      */
     public function postMessage(Request $request, string $trackingId): JsonResponse
+    {
+        return $this->storeMessage($request, $trackingId, RegistrationMessage::SENDER_USER);
+    }
+
+    /**
+     * POST /api/admin/track/{tracking_id}/messages
+     *
+     * Admin dashboard endpoint (session-authenticated, `web` group). Messages
+     * posted here are stored as sender_type "admin".
+     */
+    public function postAdminMessage(Request $request, string $trackingId): JsonResponse
+    {
+        if (! $this->isAdmin($request)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Admin access required.',
+            ], 401);
+        }
+
+        return $this->storeMessage($request, $trackingId, RegistrationMessage::SENDER_ADMIN);
+    }
+
+    /**
+     * Validate and persist a chat message for the given tracking ID. The
+     * sender type is decided by the route, never by the request payload.
+     */
+    private function storeMessage(Request $request, string $trackingId, string $senderType): JsonResponse
     {
         $registration = StaffRegistration::where('tracking_id', strtoupper($trackingId))->first();
 
@@ -453,13 +480,6 @@ class RegistrationController extends Controller
                 'message' => 'No registration found for that tracking ID.',
             ], 404);
         }
-
-        // The "sender" is either an authenticated admin or the user who owns
-        // this tracking ID. Admins get the privileged sender type; everyone
-        // else is treated as the user.
-        $senderType = $this->isAdmin($request)
-            ? RegistrationMessage::SENDER_ADMIN
-            : RegistrationMessage::SENDER_USER;
 
         if ($rejected = $this->rejectedUploadResponse($request)) {
             return $rejected;

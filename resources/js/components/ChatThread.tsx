@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { IMAGE_ACCEPT, validateImageFile } from '../utils/imageUpload';
+import { adminHeaders } from '../utils/adminAuth';
 
 export interface ChatMessage {
     id: number;
@@ -43,7 +44,7 @@ function senderLabel(senderType: ChatMessage['sender_type'], isAdminView: boolea
         const name = requesterName?.trim();
         return name ? `Requester (${name})` : 'Requester';
     }
-    return senderType === 'admin' ? 'ITEMS Network Support' : 'You';
+    return senderType === 'admin' ? 'ITEMS Support Team' : 'You';
 }
 
 export default function ChatThread({ trackingId, initialMessages, isAdminView = false, requesterName }: ChatThreadProps) {
@@ -104,10 +105,15 @@ export default function ChatThread({ trackingId, initialMessages, isAdminView = 
             if (draft.trim()) fd.append('message', draft.trim());
             if (attachment) fd.append('attachment', attachment);
 
-            const resp = await fetch(`/api/track/${encodeURIComponent(trackingId)}/messages`, {
+            // The endpoint decides the stored sender_type: the admin route
+            // stores "admin", the public tracking route stores "user".
+            const endpoint = isAdminView
+                ? `/api/admin/track/${encodeURIComponent(trackingId)}/messages`
+                : `/api/track/${encodeURIComponent(trackingId)}/messages`;
+            const resp = await fetch(endpoint, {
                 method: 'POST',
                 body: fd,
-                headers: { Accept: 'application/json' },
+                headers: isAdminView ? adminHeaders() : { Accept: 'application/json' },
             });
 
             let result: any = null;
@@ -154,7 +160,7 @@ export default function ChatThread({ trackingId, initialMessages, isAdminView = 
                     <p className="text-sm font-bold text-slate-800 truncate">
                         {isAdminView
                             ? `Conversation with ${requesterName?.trim() || 'Requester'}`
-                            : 'Conversation with ITEMS Network Support'}
+                            : 'Conversation with ITEMS Support Team'}
                     </p>
                     <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">
                         Reference: {trackingId}
@@ -192,15 +198,15 @@ export default function ChatThread({ trackingId, initialMessages, isAdminView = 
                             key={m.id}
                             className={`flex ${fromSelf ? 'justify-end' : 'justify-start'}`}
                         >
-                            <div className={`flex flex-col max-w-[80%] ${fromSelf ? 'items-end' : 'items-start'}`}>
+                            <div className={`flex flex-col max-w-[85%] sm:max-w-[75%] ${fromSelf ? 'items-end ml-auto' : 'items-start mr-auto'}`}>
                                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
                                     {senderLabel(m.sender_type, isAdminView, requesterName)}
                                 </span>
                                 <div
                                     className={`px-3.5 py-2.5 rounded-2xl text-sm shadow-sm break-words ${
                                         fromSelf
-                                            ? 'bg-[#2856C3] text-white rounded-br-md'
-                                            : 'bg-white border border-slate-200 text-slate-800 rounded-bl-md'
+                                            ? 'bg-blue-600 text-white rounded-br-md'
+                                            : 'bg-gray-100 border border-gray-200 text-gray-800 rounded-bl-md'
                                     }`}
                                 >
                                     {m.message && <p className="whitespace-pre-wrap leading-relaxed">{m.message}</p>}
@@ -212,7 +218,7 @@ export default function ChatThread({ trackingId, initialMessages, isAdminView = 
                                             className={`mt-2 inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold ${
                                                 fromSelf
                                                     ? 'bg-white/15 text-white hover:bg-white/25'
-                                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                                    : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
                                             }`}
                                         >
                                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">

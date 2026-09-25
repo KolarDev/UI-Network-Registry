@@ -597,12 +597,44 @@ export default function RegistrationForm({
 
     const pwdStrength = getPasswordStrength(formData.password);
 
+    const wizardSteps = [
+        { step: 1, label: 'Profile', desc: 'Personal Data' },
+        { step: 2, label: 'Identity', desc: 'Account Credentials' },
+        { step: 3, label: 'Verification', desc: 'Billing & Uploads' },
+        { step: 4, label: 'Review', desc: 'Submit Application' },
+    ];
+    const activeWizardStep = wizardSteps.find((s) => s.step === currentStep);
+
     return (
         <div className="w-full max-w-4xl bg-white border border-slate-300 rounded-xl shadow-md overflow-hidden relative">
 
             {/* Step Wizard Progress Bar */}
             {currentStep >= 1 && currentStep <= 4 && (
-                <div className="px-6 sm:px-12 pt-8 pb-4 bg-slate-50 relative border-b border-slate-200">
+                <>
+                {/* Mobile: compact step counter + segmented bar */}
+                <div className="sm:hidden px-4 py-3 bg-slate-50 border-b border-slate-200" aria-label="Form progress">
+                    <div className="flex items-baseline justify-between gap-3">
+                        <p className="text-xs font-bold text-ui-blue uppercase tracking-wider">
+                            Step {currentStep} of {wizardSteps.length}
+                        </p>
+                        <p className="text-xs font-semibold text-slate-700 truncate">
+                            {activeWizardStep?.label} · <span className="text-slate-500 font-medium">{activeWizardStep?.desc}</span>
+                        </p>
+                    </div>
+                    <div className="mt-2 grid grid-cols-4 gap-1.5" aria-hidden="true">
+                        {wizardSteps.map((s) => (
+                            <span
+                                key={s.step}
+                                className={`h-1.5 rounded-full transition-colors duration-300 ${
+                                    s.step < currentStep ? 'bg-ui-blue' : s.step === currentStep ? 'bg-ui-gold' : 'bg-slate-300'
+                                }`}
+                            />
+                        ))}
+                    </div>
+                </div>
+
+                {/* sm and up: numbered step points */}
+                <div className="hidden sm:block px-6 sm:px-12 pt-8 pb-4 bg-slate-50 relative border-b border-slate-200">
                     <div className="flex justify-between items-center relative">
                         {/* Progress Background Line */}
                         <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-slate-300 -translate-y-1/2 z-0" />
@@ -613,12 +645,7 @@ export default function RegistrationForm({
                         />
 
                         {/* Step Points */}
-                        {[
-                            { step: 1, label: 'Profile', desc: 'Personal Data' },
-                            { step: 2, label: 'Identity', desc: 'Account Credentials' },
-                            { step: 3, label: 'Verification', desc: 'Billing & Uploads' },
-                            { step: 4, label: 'Review', desc: 'Submit Application' },
-                        ].map((s) => {
+                        {wizardSteps.map((s) => {
                             const isCompleted = currentStep > s.step;
                             const isActive = currentStep === s.step;
                             return (
@@ -656,10 +683,11 @@ export default function RegistrationForm({
                         })}
                     </div>
                 </div>
+                </>
             )}
 
             {/* Main Form Content */}
-            <div className="p-6 sm:p-8 md:p-10">
+            <div className="p-4 sm:p-8 md:p-10">
                 {/* Submission Error Banner */}
                 {submissionResult && !submissionResult.success && currentStep < 5 && (
                     <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-red-800 animate-fadeIn">
@@ -1507,7 +1535,7 @@ export default function RegistrationForm({
                         )}
 
                         {/* Review Sections */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-55/60 border border-slate-200/80 rounded-2xl p-6 sm:p-8">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-55/60 border border-slate-200/80 rounded-2xl p-4 sm:p-8">
                             
                             {/* Personal Summary */}
                             <div className="space-y-4">
@@ -1698,7 +1726,7 @@ export default function RegistrationForm({
                                             <button
                                                 type="button"
                                                 onClick={() => onGoToTracking(submissionResult.trackingId!)}
-                                                className="px-4 py-2 bg-ui-gold hover:brightness-95 text-slate-900 rounded-lg text-xs font-bold tracking-wide shadow-sm transition-all flex items-center justify-center gap-1.5 group"
+                                                className="px-4 py-2 bg-ui-gold hover:brightness-110 text-white rounded-lg text-xs font-bold tracking-wide shadow-sm transition-all flex items-center justify-center gap-1.5 group"
                                             >
                                                 Go to Tracking Page
                                                 <svg className="w-3.5 h-3.5 transform group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
