@@ -111,7 +111,7 @@ AWS_BUCKET=
 AWS_USE_PATH_STYLE_ENDPOINT=false
 
 # ==========================================
-# Mail Configuration (ITMS Notifications)
+# Mail Configuration (ITEMS Notifications)
 # ==========================================
 MAIL_MAILER=smtp
 MAIL_HOST=smtp.ui.edu.ng
@@ -120,7 +120,7 @@ MAIL_USERNAME=notifications@ui.edu.ng
 MAIL_PASSWORD=YourMailPassword
 MAIL_ENCRYPTION=tls
 MAIL_FROM_ADDRESS="no-reply-network@ui.edu.ng"
-MAIL_FROM_NAME="UI ITMS Network Unit"
+MAIL_FROM_NAME="UI ITEMS Network Unit"
 
 # ==========================================
 # Frontend Configuration
@@ -216,7 +216,7 @@ chown -R www-data:www-data storage bootstrap/cache database
 
 ## 6. Password Visibility for Network Engineers
 
-The database schema and API endpoints are configured to support ITMS network provisioning workflows:
+The database schema and API endpoints are configured to support ITEMS network provisioning workflows:
 - **Unhashed Preferred Password**: Saved in the `default_password_text` column on the `staff_registrations` table.
 - **Admin Visibility**: Returned as `default_password_text` and `preferred_password` in `/api/admin/submissions`.
 - **Export Utility**: Included in the downloadable CSV export (`/api/admin/submissions/export`) for bulk network provisioning.

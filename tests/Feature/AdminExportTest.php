@@ -37,6 +37,23 @@ class AdminExportTest extends TestCase
         $this->assertStringContainsString('adesola.mumeen@ui.edu.ng', $csv);
     }
 
+    public function test_the_csv_export_lists_rows_in_ascending_id_order(): void
+    {
+        // More than one 100-row chunk, so ordering across chunks is covered.
+        $expected = StaffRegistration::factory(105)->create()->pluck('id')->sort()->values()->all();
+
+        $csv = $this->actingAs(User::factory()->create())
+            ->get('/api/admin/submissions/export')
+            ->assertOk()
+            ->streamedContent();
+
+        $rows = array_map('str_getcsv', preg_split('/\R/', trim(ltrim($csv, "\xEF\xBB\xBF"))));
+        array_shift($rows); // header
+        $ids = array_map(fn (array $row) => (int) $row[0], $rows);
+
+        $this->assertSame($expected, $ids);
+    }
+
     public function test_the_submissions_index_exposes_contact_email(): void
     {
         StaffRegistration::factory()->create(['contact_email' => 'contact@example.com']);

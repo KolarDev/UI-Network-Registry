@@ -8,8 +8,8 @@ export interface StatusStep {
 
 export const STATUS_STEPS: StatusStep[] = [
     { key: 'pending', label: 'Pending', description: 'Submitted & awaiting initial review.' },
-    { key: 'in_review', label: 'In Review', description: 'ITMS is reviewing your documents.' },
-    { key: 'completed', label: 'Completed', description: 'Verified & finalized by ITMS.' },
+    { key: 'in_review', label: 'In Review', description: 'ITEMS is reviewing your documents.' },
+    { key: 'completed', label: 'Completed', description: 'Verified & finalized by ITEMS.' },
 ];
 
 const ORDER: Record<RegistrationStatus, number> = {

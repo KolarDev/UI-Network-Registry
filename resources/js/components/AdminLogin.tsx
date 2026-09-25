@@ -68,7 +68,7 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                     </svg>
                 </div>
                 <h2 className="text-2xl font-bold font-serif text-slate-900 tracking-wide">
-                    ITMS ADMIN PORTAL
+                    ITEMS ADMIN PORTAL
                 </h2>
                 <p className="text-xs font-bold text-ui-gold uppercase tracking-wider mt-1">
                     Administrative Access Gate

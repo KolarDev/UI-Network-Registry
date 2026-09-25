@@ -630,7 +630,7 @@ export default function AdminDashboard() {
                                             {/* Username */}
                                             <td className="py-3.5 px-4 text-xs">
                                                 <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-800 rounded font-mono font-bold">
-                                                    @{record.username}
+                                                    {record.username}
                                                 </span>
                                             </td>
 
@@ -909,7 +909,7 @@ export default function AdminDashboard() {
                                 <div className="pt-3 border-t border-slate-200 grid grid-cols-2 gap-4">
                                     <div>
                                         <span className="text-slate-500 block uppercase tracking-wider text-[10px] font-bold">Preferred Username</span>
-                                        <strong className="text-[#2856C3] font-mono font-bold text-sm block mt-0.5">@{selectedSubmission.username}</strong>
+                                        <strong className="text-[#2856C3] font-mono font-bold text-sm block mt-0.5">{selectedSubmission.username}</strong>
                                     </div>
 
                                     <div>
@@ -1191,6 +1191,7 @@ export default function AdminDashboard() {
                                         trackingId={chatTarget.trackingId}
                                         initialMessages={chatMessages}
                                         isAdminView
+                                        requesterName={chatTarget.fullName}
                                     />
                                 )}
                             </div>

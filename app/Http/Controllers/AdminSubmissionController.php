@@ -113,8 +113,10 @@ class AdminSubmissionController extends Controller
                 'Created At',
             ]);
 
-            // Chunk records to prevent out-of-memory errors
-            $query->orderBy('created_at', 'desc')->chunk(100, function ($registrations) use ($handle) {
+            // Oldest first (ascending id), so new submissions are appended to
+            // the end of the file. chunkById pages by key, keeping the order
+            // stable and memory bounded.
+            $query->chunkById(100, function ($registrations) use ($handle) {
                 foreach ($registrations as $reg) {
                     fputcsv($handle, [
                         $reg->id,

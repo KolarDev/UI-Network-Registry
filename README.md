@@ -9,9 +9,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 A production-ready, full-stack **Network Service Registry** for the University of Ibadan
-Information Technology & Media Services (ITMS). Staff register for the campus
-network service, get a public **Tracking ID**, communicate with ITMS admins
-through a built-in chat thread, and ITMS operators review, verify, and lock
+Information Technology and Media Services (ITEMS). Staff register for the campus
+network service, get a public **Tracking ID**, communicate with ITEMS admins
+through a built-in chat thread, and ITEMS operators review, verify, and lock
 applications through a dedicated **Admin Portal**.
 
 ---
@@ -39,7 +39,7 @@ The portal is composed of two faces that share one backend:
 | Surface | Audience | URL | Purpose |
 | --- | --- | --- | --- |
 | **Registration Portal** | University staff | `/` | 4-step wizard, document upload, tracking lookup, edit & chat |
-| **Admin Portal** | ITMS support staff | `/ui-admin` | Review submissions, toggle status, chat with users, export CSV |
+| **Admin Portal** | ITEMS support staff | `/ui-admin` | Review submissions, toggle status, chat with users, export CSV |
 
 ### Key Features
 
@@ -277,7 +277,7 @@ php artisan storage:link
 - Monthly deductions are processed via salary.
 - Three (3) months' notice is required to unsubscribe.
 - A **₦2,000 reactivation fee** applies if access is suspended and re-requested.
-- All charges are subject to change by ITMS administration.
+- All charges are subject to change by ITEMS administration.
 
 ### Validation rules
 
@@ -313,9 +313,9 @@ loads a real-time dashboard with:
 - Profile details
 - Edit Application button (greyed out when `status === 'completed'`)
 - Locked badge when finalized
-- ITMS support chat thread (text + image attachments)
+- ITEMS support chat thread (text + image attachments)
 
-### 6.2 For ITMS admins
+### 6.2 For ITEMS admins
 
 After logging in at `/ui-admin`, the **Admin Dashboard** shows every
 submission. From each row the admin can:

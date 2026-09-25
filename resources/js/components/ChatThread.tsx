@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { IMAGE_ACCEPT, validateImageFile } from '../utils/imageUpload';
 
 export interface ChatMessage {
     id: number;
@@ -11,8 +12,14 @@ export interface ChatMessage {
 interface ChatThreadProps {
     trackingId: string;
     initialMessages: ChatMessage[];
-    /** When true, message bubbles are styled as if from the admin (for the user view). */
+    /**
+     * Viewer perspective. Admin view: admin messages on the right, requester on
+     * the left. User view (default): the user's own messages on the right,
+     * ITEMS support on the left.
+     */
     isAdminView?: boolean;
+    /** Staff member's name, shown as "Requester (<name>)" in the admin view. */
+    requesterName?: string;
 }
 
 function formatTime(iso: string | null): string {
@@ -30,13 +37,23 @@ function formatTime(iso: string | null): string {
     }
 }
 
-export default function ChatThread({ trackingId, initialMessages, isAdminView = false }: ChatThreadProps) {
+function senderLabel(senderType: ChatMessage['sender_type'], isAdminView: boolean, requesterName?: string): string {
+    if (isAdminView) {
+        if (senderType === 'admin') return 'ITEMS Admin';
+        const name = requesterName?.trim();
+        return name ? `Requester (${name})` : 'Requester';
+    }
+    return senderType === 'admin' ? 'ITEMS Network Support' : 'You';
+}
+
+export default function ChatThread({ trackingId, initialMessages, isAdminView = false, requesterName }: ChatThreadProps) {
     const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
     const [draft, setDraft] = useState<string>('');
     const [attachment, setAttachment] = useState<File | null>(null);
     const [attachmentPreview, setAttachmentPreview] = useState<string | null>(null);
     const [sending, setSending] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
+    const [isDragOver, setIsDragOver] = useState<boolean>(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -60,6 +77,20 @@ export default function ChatThread({ trackingId, initialMessages, isAdminView = 
         setAttachmentPreview(url);
         return () => URL.revokeObjectURL(url);
     }, [attachment]);
+
+    /** Validate an attachment the moment it is picked or dropped. */
+    const acceptAttachment = (file: File | null) => {
+        if (!file) return;
+        const validationError = validateImageFile(file);
+        if (validationError) {
+            setAttachment(null);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            setError(validationError);
+            return;
+        }
+        setError(null);
+        setAttachment(file);
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -120,7 +151,11 @@ export default function ChatThread({ trackingId, initialMessages, isAdminView = 
                     </svg>
                 </div>
                 <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-slate-800">Conversation with ITMS</p>
+                    <p className="text-sm font-bold text-slate-800 truncate">
+                        {isAdminView
+                            ? `Conversation with ${requesterName?.trim() || 'Requester'}`
+                            : 'Conversation with ITEMS Network Support'}
+                    </p>
                     <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">
                         Reference: {trackingId}
                     </p>
@@ -142,14 +177,16 @@ export default function ChatThread({ trackingId, initialMessages, isAdminView = 
                         </div>
                         <p className="text-sm font-semibold text-slate-700">No messages yet</p>
                         <p className="text-xs text-slate-500 mt-1 max-w-xs">
-                            Start a conversation with the ITMS Network Unit. Replies typically arrive within 1 business day.
+                            {isAdminView
+                                ? 'Send a message to the requester about this application.'
+                                : 'Start a conversation with the ITEMS Network Unit. Replies typically arrive within 1 business day.'}
                         </p>
                     </div>
                 )}
 
                 {messages.map((m) => {
+                    // "Self" = the viewer's own side: rendered on the right in brand blue.
                     const fromSelf = isAdminView ? m.sender_type === 'admin' : m.sender_type === 'user';
-                    const isAdmin = m.sender_type === 'admin';
                     return (
                         <div
                             key={m.id}
@@ -157,13 +194,13 @@ export default function ChatThread({ trackingId, initialMessages, isAdminView = 
                         >
                             <div className={`flex flex-col max-w-[80%] ${fromSelf ? 'items-end' : 'items-start'}`}>
                                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                                    {isAdmin ? 'ITMS Admin' : 'You'}
+                                    {senderLabel(m.sender_type, isAdminView, requesterName)}
                                 </span>
                                 <div
                                     className={`px-3.5 py-2.5 rounded-2xl text-sm shadow-sm break-words ${
-                                        isAdmin
-                                            ? 'bg-white border border-slate-200 text-slate-800 rounded-bl-md'
-                                            : 'bg-[#2856C3] text-white rounded-br-md'
+                                        fromSelf
+                                            ? 'bg-[#2856C3] text-white rounded-br-md'
+                                            : 'bg-white border border-slate-200 text-slate-800 rounded-bl-md'
                                     }`}
                                 >
                                     {m.message && <p className="whitespace-pre-wrap leading-relaxed">{m.message}</p>}
@@ -173,9 +210,9 @@ export default function ChatThread({ trackingId, initialMessages, isAdminView = 
                                             target="_blank"
                                             rel="noreferrer"
                                             className={`mt-2 inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold ${
-                                                isAdmin
-                                                    ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                                    : 'bg-white/15 text-white hover:bg-white/25'
+                                                fromSelf
+                                                    ? 'bg-white/15 text-white hover:bg-white/25'
+                                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                                             }`}
                                         >
                                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -195,7 +232,22 @@ export default function ChatThread({ trackingId, initialMessages, isAdminView = 
             </div>
 
             {/* Composer */}
-            <form onSubmit={handleSubmit} className="border-t border-slate-200 bg-white p-3 sm:p-4 space-y-2">
+            <form
+                onSubmit={handleSubmit}
+                onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragOver(true);
+                }}
+                onDragLeave={() => setIsDragOver(false)}
+                onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragOver(false);
+                    if (!sending) acceptAttachment(e.dataTransfer.files?.[0] ?? null);
+                }}
+                className={`border-t border-slate-200 p-3 sm:p-4 space-y-2 transition-colors ${
+                    isDragOver ? 'bg-blue-50/60 ring-2 ring-inset ring-[#2856C3]/30' : 'bg-white'
+                }`}
+            >
                 {attachmentPreview && (
                     <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-2">
                         <img
@@ -235,8 +287,8 @@ export default function ChatThread({ trackingId, initialMessages, isAdminView = 
                     <input
                         ref={fileInputRef}
                         type="file"
-                        accept="image/jpeg,image/png"
-                        onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}
+                        accept={IMAGE_ACCEPT}
+                        onChange={(e) => acceptAttachment(e.target.files?.[0] ?? null)}
                         className="hidden"
                     />
                     <button

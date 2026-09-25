@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, DragEvent, ChangeEvent } from 'react';
 import ImagePreviewModal from './ImagePreviewModal';
 import type { TrackedRegistration } from './TrackingLookup';
+import { IMAGE_ACCEPT, validateImageFile } from '../utils/imageUpload';
 
 // ==========================================
 // 1. TypeScript Interfaces
@@ -48,14 +49,13 @@ export default function RegistrationForm({
     editRegistration = null,
     onCancelEdit,
     onEditSaved,
-    highlightTrackingId = null,
-    onTrackingRegistered,
+    onGoToTracking,
 }: {
     editRegistration?: TrackedRegistration | null;
     onCancelEdit?: () => void;
     onEditSaved?: () => void;
-    highlightTrackingId?: string | null;
-    onTrackingRegistered?: (trackingId: string) => void;
+    /** Opens the tracking dashboard; only invoked when the user asks to from the success screen. */
+    onGoToTracking?: (trackingId: string) => void;
 } = {}) {
     // ==========================================
     // 2. State & References
@@ -386,19 +386,30 @@ export default function RegistrationForm({
         }
     };
 
-    const handleFileChange = (e: ChangeEvent<HTMLInputElement>, fieldName: 'staffIdFile' | 'payslipFile') => {
-        const file = e.target.files?.[0] || null;
-        setFormData((prev) => ({
-            ...prev,
-            [fieldName]: file,
-        }));
+    /**
+     * Validate a picked/dropped file immediately. An invalid file is never
+     * stored: the field and the underlying <input> are reset and an inline
+     * error is shown, so it cannot slip through to submission.
+     */
+    const acceptFile = (file: File | null, fieldName: 'staffIdFile' | 'payslipFile') => {
+        if (!file) return;
 
-        if (errors[fieldName]) {
-            setErrors((prev) => ({
-                ...prev,
-                [fieldName]: undefined,
-            }));
+        const inputRef = fieldName === 'staffIdFile' ? staffIdInputRef : payslipInputRef;
+        const error = validateImageFile(file);
+
+        if (error) {
+            if (inputRef.current) inputRef.current.value = '';
+            setFormData((prev) => ({ ...prev, [fieldName]: null }));
+            setErrors((prev) => ({ ...prev, [fieldName]: error }));
+            return;
         }
+
+        setFormData((prev) => ({ ...prev, [fieldName]: file }));
+        setErrors((prev) => ({ ...prev, [fieldName]: undefined }));
+    };
+
+    const handleFileChange = (e: ChangeEvent<HTMLInputElement>, fieldName: 'staffIdFile' | 'payslipFile') => {
+        acceptFile(e.target.files?.[0] || null, fieldName);
     };
 
     const handleDragOver = (e: DragEvent<HTMLDivElement>, fieldName: 'staffIdFile' | 'payslipFile') => {
@@ -417,40 +428,12 @@ export default function RegistrationForm({
         if (fieldName === 'staffIdFile') setIsDragOverStaffId(false);
         if (fieldName === 'payslipFile') setIsDragOverPayslip(false);
 
-        const file = e.dataTransfer.files?.[0] || null;
-        if (file) {
-            if (file.size > 5 * 1024 * 1024) {
-                setErrors((prev) => ({
-                    ...prev,
-                    [fieldName]: 'File is too large. Maximum size is 5MB.',
-                }));
-                return;
-            }
-
-            const allowedTypes = ['image/jpeg', 'image/png'];
-            if (!allowedTypes.includes(file.type)) {
-                setErrors((prev) => ({
-                    ...prev,
-                    [fieldName]: 'Only JPEG or PNG images are accepted.',
-                }));
-                return;
-            }
-
-            setFormData((prev) => ({
-                ...prev,
-                [fieldName]: file,
-            }));
-
-            if (errors[fieldName]) {
-                setErrors((prev) => ({
-                    ...prev,
-                    [fieldName]: undefined,
-                }));
-            }
-        }
+        acceptFile(e.dataTransfer.files?.[0] || null, fieldName);
     };
 
     const removeFile = (fieldName: 'staffIdFile' | 'payslipFile') => {
+        const inputRef = fieldName === 'staffIdFile' ? staffIdInputRef : payslipInputRef;
+        if (inputRef.current) inputRef.current.value = '';
         setFormData((prev) => ({
             ...prev,
             [fieldName]: null,
@@ -528,10 +511,9 @@ export default function RegistrationForm({
                         message: result.message,
                         sentData: result.sentData,
                     });
+                    // Stay on the success screen; the user opens the tracking
+                    // dashboard explicitly via "Go to Tracking Page".
                     setCurrentStep(5);
-                    if (trackingId && onTrackingRegistered) {
-                        onTrackingRegistered(trackingId);
-                    }
                 }
             } else if (response.status === 403) {
                 setSubmissionResult({
@@ -1081,23 +1063,23 @@ export default function RegistrationForm({
                                     </span>
                                 </div>
                                 <div className="relative">
-                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-semibold select-none">
-                                        @
-                                    </div>
                                     <input
                                         type="text"
                                         id="username"
                                         name="username"
                                         value={formData.username}
                                         onChange={handleChange}
-                                        className={`w-full pl-9 pr-12 py-3 bg-slate-50 border rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 transition-all duration-200 lowercase ${
+                                        autoComplete="off"
+                                        autoCapitalize="none"
+                                        spellCheck={false}
+                                        className={`w-full px-4 pr-12 py-3 bg-slate-50 border rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 transition-all duration-200 lowercase ${
                                             errors.username
                                                 ? 'border-red-500 focus:ring-red-500/10'
                                                 : formData.username && validateUsername(formData.username)
                                                 ? 'border-emerald-500 focus:ring-emerald-500/10'
                                                 : 'border-slate-200 focus:border-[#2856C3] focus:ring-[#2856C3]'
                                         }`}
-                                        placeholder="e.g. jbrown"
+                                        placeholder="e.g. john.doe"
                                     />
                                     {formData.username && (
                                         <div className="absolute right-4 top-1/2 -translate-y-1/2">
@@ -1249,7 +1231,7 @@ export default function RegistrationForm({
                                             )}
                                         </p>
                                         <ul className="list-disc pl-5 space-y-1 text-xs text-slate-500">
-                                            <li>These charges are subject to change by ITMS Administration.</li>
+                                            <li>These charges are subject to change by ITEMS Administration.</li>
                                             <li>Minimum of three (3) months notice is required for unsubscribing from the service.</li>
                                             <li>A <strong className="text-slate-700">₦2,000 reactivation fee</strong> applies if access is suspended and re-requested.</li>
                                         </ul>
@@ -1320,7 +1302,7 @@ export default function RegistrationForm({
                                         type="file"
                                         ref={staffIdInputRef}
                                         onChange={(e) => handleFileChange(e, 'staffIdFile')}
-                                        accept="image/jpeg,image/png"
+                                        accept={IMAGE_ACCEPT}
                                         className="hidden"
                                     />
 
@@ -1423,7 +1405,7 @@ export default function RegistrationForm({
                                         type="file"
                                         ref={payslipInputRef}
                                         onChange={(e) => handleFileChange(e, 'payslipFile')}
-                                        accept="image/jpeg,image/png"
+                                        accept={IMAGE_ACCEPT}
                                         className="hidden"
                                     />
 
@@ -1510,7 +1492,7 @@ export default function RegistrationForm({
                             <h3 className="text-lg sm:text-xl font-bold text-slate-800 flex items-center gap-2">
                                 <span className="text-ui-gold font-serif">IV.</span> Application Summary Review
                             </h3>
-                            <p className="text-slate-500 text-sm mt-1">Verify all registration details before finalizing submission to the ITMS Network Unit.</p>
+                            <p className="text-slate-500 text-sm mt-1">Verify all registration details before finalizing submission to the ITEMS Network Unit.</p>
                         </div>
 
                         {isEditMode && editRegistration && (
@@ -1596,7 +1578,7 @@ export default function RegistrationForm({
                                 <div className="space-y-2 text-sm text-slate-700">
                                     <div className="flex justify-between py-1 border-b border-slate-100">
                                         <span className="text-slate-400">Preferred Username:</span>
-                                        <span className="text-ui-blue font-bold font-mono">@{formData.username}</span>
+                                        <span className="text-ui-blue font-bold font-mono">{formData.username}</span>
                                     </div>
                                     <div className="flex justify-between items-center py-1 border-b border-slate-100">
                                         <span className="text-slate-400">Initial Password:</span>
@@ -1652,7 +1634,7 @@ export default function RegistrationForm({
                                 </svg>
                             </div>
                             <p className="text-xs text-slate-500 leading-relaxed font-medium">
-                                By submitting this form, you request network activation under the rules of the ITMS department, University of Ibadan. The registered details will be verified against the uploaded University ID Card and Payslip. You will receive an activation email once verification completes.
+                                By submitting this form, you request network activation under the rules of the ITEMS department, University of Ibadan. The registered details will be verified against the uploaded University ID Card and Payslip. You will receive an activation email once verification completes.
                             </p>
                         </div>
                     </div>
@@ -1687,7 +1669,7 @@ export default function RegistrationForm({
                                         {submissionResult.trackingId}
                                     </p>
                                     <p className="text-[11px] text-blue-100 max-w-xs mx-auto leading-relaxed">
-                                        Save this ID. Use it on the homepage to track your application status, edit your details, and chat with ITMS.
+                                        Save this ID. Use it on the homepage to track your application status, edit your details, and chat with ITEMS.
                                     </p>
                                     <div className="flex flex-col sm:flex-row gap-2 justify-center pt-2">
                                         <button
@@ -1711,13 +1693,18 @@ export default function RegistrationForm({
                                                 </>
                                             )}
                                         </button>
-                                        {highlightTrackingId && (
-                                            <span className="px-3 py-2 text-[11px] text-blue-100 font-medium inline-flex items-center justify-center gap-1.5">
-                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                        {/* Primary next step: open the tracking dashboard (only on click) */}
+                                        {onGoToTracking && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onGoToTracking(submissionResult.trackingId!)}
+                                                className="px-4 py-2 bg-ui-gold hover:brightness-95 text-slate-900 rounded-lg text-xs font-bold tracking-wide shadow-sm transition-all flex items-center justify-center gap-1.5 group"
+                                            >
+                                                Go to Tracking Page
+                                                <svg className="w-3.5 h-3.5 transform group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                                                 </svg>
-                                                Dashboard loaded below
-                                            </span>
+                                            </button>
                                         )}
                                     </div>
                                 </div>
@@ -1745,7 +1732,7 @@ export default function RegistrationForm({
                                     </div>
                                     <div className="flex justify-between">
                                         <span>Allocated Username:</span>
-                                        <strong className="text-ui-blue font-mono">@{submissionResult.sentData.username}</strong>
+                                        <strong className="text-ui-blue font-mono">{submissionResult.sentData.username}</strong>
                                     </div>
                                     <div className="flex justify-between">
                                         <span>Unit/Department:</span>
@@ -1776,7 +1763,7 @@ export default function RegistrationForm({
                             <button
                                 type="button"
                                 onClick={resetForm}
-                                className="px-6 py-3 bg-ui-blue hover:bg-blue-800 text-white rounded-xl text-sm font-bold tracking-wide shadow-md transition-all duration-200 cursor-pointer"
+                                className="px-6 py-3 bg-white hover:bg-slate-100 text-slate-900 rounded-xl text-sm font-bold tracking-wide transition-all duration-200 border border-slate-300 flex items-center justify-center gap-2 cursor-pointer"
                             >
                                 Register Another Staff Member
                             </button>
