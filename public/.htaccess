@@ -23,3 +23,27 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
+# A registration carries two documents of up to 5MB each, so PHP must be
+# allowed to receive them. With the stock 2M upload_max_filesize, PHP discards
+# any larger file before Laravel runs, and the request looks like a missing
+# upload instead of an oversized one.
+#
+# These directives only apply where PHP runs as an Apache module; on hosts that
+# forbid php_value (php-fpm, most shared hosting) they are ignored, so set the
+# same values in php.ini or the pool config there:
+#   upload_max_filesize = 6M
+#   post_max_size = 16M
+<IfModule mod_php.c>
+    php_value upload_max_filesize 6M
+    php_value post_max_size 16M
+</IfModule>
+<IfModule mod_php7.c>
+    php_value upload_max_filesize 6M
+    php_value post_max_size 16M
+</IfModule>
+<IfModule mod_php8.c>
+    php_value upload_max_filesize 6M
+    php_value post_max_size 16M
+</IfModule>
+

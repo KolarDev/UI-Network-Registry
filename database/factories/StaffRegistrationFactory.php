@@ -110,6 +110,7 @@ class StaffRegistrationFactory extends Factory
             'staff_id' => 'UI/STF/' . fake()->unique()->numberBetween(1000, 99999),
             'designation' => $designationValue,
             'phone' => $phone,
+            'contact_email' => strtolower($firstName.'.'.$lastName.'@gmail.com'),
             'faculty' => $facultyValue,
             'department' => $departmentValue,
             'username' => $username,

@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AuthorizesAdmin;
 use App\Models\RegistrationMessage;
 use App\Models\StaffRegistration;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -15,6 +16,8 @@ use Throwable;
 
 class RegistrationController extends Controller
 {
+    use AuthorizesAdmin;
+
     /**
      * Allowed status transitions that an admin may apply.
      */
@@ -24,11 +27,23 @@ class RegistrationController extends Controller
     ];
 
     /**
-     * Shared image upload rules: JPEG/PNG only, max 5 MB.
+     * Shared image upload rules: real JPEG/PNG content only, max 5 MB.
+     *
+     * Both `mimes` and `mimetypes` are applied deliberately:
+     *  - `mimes` allow-lists the file *extension* (jpg/jpeg/png).
+     *  - `mimetypes` inspects the actual file *contents* with finfo, so a
+     *    script or archive renamed to `.jpg` is rejected rather than stored.
+     * PHP/libmagic reports `image/jpeg` for both `.jpg` and `.jpeg`, so the
+     * content-type allow-list is image/jpeg + image/png.
      */
     private function imageRules(bool $required = true): array
     {
-        $rules = ['file', 'mimes:jpg,jpeg,png', 'max:5120'];
+        $rules = [
+            'file',
+            'mimes:jpg,jpeg,png',
+            'mimetypes:image/jpeg,image/png',
+            'max:5120',
+        ];
         if ($required) {
             array_unshift($rules, 'required');
         } else {
@@ -36,6 +51,84 @@ class RegistrationController extends Controller
         }
 
         return $rules;
+    }
+
+    /**
+     * Detect an upload that PHP itself rejected before validation ran, and
+     * build the 422 response explaining it.
+     *
+     * Two separate PHP limits can silently swallow a file:
+     *  1. The whole request body exceeding `post_max_size` empties $_POST and
+     *     $_FILES, so the uploads arrive "missing" and the caller gets a
+     *     misleading "photocopy is required" error.
+     *  2. A single file exceeding `upload_max_filesize` is marked with
+     *     UPLOAD_ERR_INI_SIZE and fails the `file` rule, producing only the
+     *     generic "failed to upload" message.
+     *
+     * Both are environment misconfigurations (the app accepts 5MB), so they are
+     * reported as such rather than as user error.
+     */
+    private function rejectedUploadResponse(Request $request): ?JsonResponse
+    {
+        $contentLength = (int) $request->server('CONTENT_LENGTH');
+        $postMax = $this->iniBytes((string) ini_get('post_max_size'));
+
+        if ($postMax > 0 && $contentLength > $postMax) {
+            return $this->uploadRejected(
+                'The upload was too large for the server to accept. Each document must be 5MB or smaller.'
+            );
+        }
+
+        foreach (['staffIdFile', 'payslipFile', 'attachment'] as $field) {
+            $file = $request->file($field);
+
+            if (! $file instanceof UploadedFile) {
+                continue;
+            }
+
+            if (in_array($file->getError(), [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)) {
+                $limit = trim((string) ini_get('upload_max_filesize'));
+
+                return $this->uploadRejected(sprintf(
+                    'The uploaded document exceeds this server\'s %s upload limit. Each document must be 5MB or smaller.',
+                    $limit !== '' ? $limit : 'configured'
+                ));
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Convert a PHP ini shorthand size ("8M", "512K", "1G") to bytes.
+     */
+    private function iniBytes(string $value): int
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return 0;
+        }
+
+        $unit = strtolower($value[strlen($value) - 1]);
+        $number = (int) $value;
+
+        return match ($unit) {
+            'g' => $number * 1024 * 1024 * 1024,
+            'm' => $number * 1024 * 1024,
+            'k' => $number * 1024,
+            default => $number,
+        };
+    }
+
+    /**
+     * Shared 422 payload for a rejected upload.
+     */
+    private function uploadRejected(string $message): JsonResponse
+    {
+        return response()->json([
+            'success' => false,
+            'message' => $message,
+        ], 422);
     }
 
     /**
@@ -54,6 +147,9 @@ class RegistrationController extends Controller
             'designation.required_if' => 'Please select your designation (Academic or Non-Teaching).',
             'phone.required' => 'Phone number is required.',
             'phone.regex' => 'Please enter a valid Nigerian phone number (e.g., 08031234567 or +2348031234567).',
+            'contactEmail.required' => 'Contact email is required.',
+            'contactEmail.email' => 'Please enter a valid contact email address.',
+            'contactEmail.max' => 'Contact email must not exceed 255 characters.',
             'faculty.required_if' => 'Faculty / Unit is required.',
             'department.required_if' => 'Department / Unit is required.',
             'username.required' => 'Preferred username is required.',
@@ -66,12 +162,18 @@ class RegistrationController extends Controller
             'staffIdFile.required' => 'Staff ID card photocopy is required.',
             'staffIdFile.file' => 'Staff ID upload must be a valid file.',
             'staffIdFile.mimes' => 'Staff ID card must be a JPEG or PNG image (max 5MB).',
+            'staffIdFile.mimetypes' => 'Staff ID card must be a JPEG or PNG image (max 5MB).',
             'staffIdFile.max' => 'Staff ID card file size must not exceed 5MB.',
             'payslipFile.required' => 'Recent payslip photocopy is required.',
             'payslipFile.file' => 'Payslip upload must be a valid file.',
             'payslipFile.mimes' => 'Payslip must be a JPEG or PNG image (max 5MB).',
+            'payslipFile.mimetypes' => 'Payslip must be a JPEG or PNG image (max 5MB).',
             'payslipFile.max' => 'Payslip file size must not exceed 5MB.',
         ];
+
+        if ($rejected = $this->rejectedUploadResponse($request)) {
+            return $rejected;
+        }
 
         $validator = Validator::make($request->all(), [
             'fullName' => 'required|string|min:3',
@@ -88,6 +190,7 @@ class RegistrationController extends Controller
                 'string',
                 'regex:/^(?:\+234|0)[789][01]\d{8}$/',
             ],
+            'contactEmail' => 'required|string|email|max:255',
             'faculty' => 'required_if:role,staff,dean,hod|nullable|string',
             'department' => 'required_if:role,staff,hod,director|nullable|string',
             'username' => [
@@ -126,6 +229,7 @@ class RegistrationController extends Controller
                 'role' => $request->role,
                 'designation' => $request->role === 'staff' ? $request->designation : null,
                 'phone' => trim($request->phone),
+                'contact_email' => strtolower(trim($request->contactEmail)),
                 'faculty' => in_array($request->role, ['staff', 'dean', 'hod']) ? trim($request->faculty) : null,
                 'department' => in_array($request->role, ['staff', 'hod', 'director']) ? trim($request->department) : null,
                 'username' => strtolower(trim($request->username)),
@@ -195,6 +299,7 @@ class RegistrationController extends Controller
                 'role' => $registration->role,
                 'designation' => $registration->designation,
                 'phone' => $registration->phone,
+                'contact_email' => $registration->contact_email,
                 'faculty' => $registration->faculty,
                 'department' => $registration->department,
                 'username' => $registration->username,
@@ -241,15 +346,23 @@ class RegistrationController extends Controller
         $messages = [
             'fullName.min' => 'Full name must be at least 3 characters.',
             'phone.regex' => 'Please enter a valid Nigerian phone number.',
+            'contactEmail.email' => 'Please enter a valid contact email address.',
             'staffIdFile.mimes' => 'Staff ID card must be a JPEG or PNG image (max 5MB).',
+            'staffIdFile.mimetypes' => 'Staff ID card must be a JPEG or PNG image (max 5MB).',
             'staffIdFile.max' => 'Staff ID card file size must not exceed 5MB.',
             'payslipFile.mimes' => 'Payslip must be a JPEG or PNG image (max 5MB).',
+            'payslipFile.mimetypes' => 'Payslip must be a JPEG or PNG image (max 5MB).',
             'payslipFile.max' => 'Payslip file size must not exceed 5MB.',
         ];
+
+        if ($rejected = $this->rejectedUploadResponse($request)) {
+            return $rejected;
+        }
 
         $validator = Validator::make($request->all(), [
             'fullName' => 'sometimes|required|string|min:3',
             'phone' => ['sometimes', 'required', 'string', 'regex:/^(?:\+234|0)[789][01]\d{8}$/'],
+            'contactEmail' => 'sometimes|required|string|email|max:255',
             'faculty' => 'sometimes|nullable|string',
             'department' => 'sometimes|nullable|string',
             'designation' => 'sometimes|nullable|string|in:Academic,Non-Teaching',
@@ -289,6 +402,9 @@ class RegistrationController extends Controller
             }
             if ($request->has('phone')) {
                 $registration->phone = trim($request->phone);
+            }
+            if ($request->filled('contactEmail')) {
+                $registration->contact_email = strtolower(trim($request->contactEmail));
             }
             if ($request->has('faculty')) {
                 $registration->faculty = $request->faculty ? trim($request->faculty) : null;
@@ -345,16 +461,22 @@ class RegistrationController extends Controller
             ? RegistrationMessage::SENDER_ADMIN
             : RegistrationMessage::SENDER_USER;
 
+        if ($rejected = $this->rejectedUploadResponse($request)) {
+            return $rejected;
+        }
+
         $validator = Validator::make($request->all(), [
             'message' => 'required_without:attachment|string|nullable',
             'attachment' => [
                 'nullable',
                 'file',
                 'mimes:jpg,jpeg,png',
+                'mimetypes:image/jpeg,image/png',
                 'max:5120',
             ],
         ], [
             'attachment.mimes' => 'Attachment must be a JPEG or PNG image (max 5MB).',
+            'attachment.mimetypes' => 'Attachment must be a JPEG or PNG image (max 5MB).',
             'attachment.max' => 'Attachment file size must not exceed 5MB.',
             'message.required_without' => 'Please enter a message or attach an image.',
         ]);
@@ -449,22 +571,6 @@ class RegistrationController extends Controller
                 'is_editable' => $registration->is_editable,
             ],
         ]);
-    }
-
-    /**
-     * Determine whether the current request is from an authenticated admin,
-     * using either a Laravel session or the shared bearer/query token used
-     * elsewhere in the admin endpoints.
-     */
-    protected function isAdmin(Request $request): bool
-    {
-        if (Auth::check()) {
-            return true;
-        }
-
-        $token = $request->bearerToken() ?? $request->query('token');
-
-        return $token === 'mock-admin-session-token';
     }
 
     /**

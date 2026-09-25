@@ -25,6 +25,7 @@ export interface SubmissionRecord {
     role: 'staff' | 'dean' | 'hod' | 'director';
     designation?: 'Academic' | 'Non-Teaching' | '';
     phone: string;
+    contactEmail?: string;
     faculty: string;
     department: string;
     username: string;
@@ -118,6 +119,7 @@ export default function AdminDashboard() {
                 role: dbRecord.role || 'staff',
                 designation: dbRecord.designation || '',
                 phone: dbRecord.phone || '',
+                contactEmail: dbRecord.contact_email || '',
                 faculty: dbRecord.faculty || '',
                 department: dbRecord.department || '',
                 username: dbRecord.username || '',
@@ -497,13 +499,14 @@ export default function AdminDashboard() {
                             <p className="text-xs text-slate-500 mt-1">Try clearing some of your search parameters.</p>
                         </div>
                     ) : (
-                        <table className="w-full text-left border-collapse min-w-[1100px]">
+                        <table className="w-full text-left border-collapse min-w-[1250px]">
                             <thead>
                                 <tr className="bg-[#2856C3] text-[10px] text-white font-bold uppercase tracking-wider border-b border-slate-200">
                                     <th className="py-3.5 px-4">Staff Member</th>
                                     <th className="py-3.5 px-4">Department / Unit</th>
                                     <th className="py-3.5 px-4">Staff ID No.</th>
                                     <th className="py-3.5 px-4">Role</th>
+                                    <th className="py-3.5 px-4">Contact Email</th>
                                     <th className="py-3.5 px-4">Status</th>
                                     <th className="py-3.5 px-4">Allocated Username</th>
                                     <th className="py-3.5 px-4">Preferred Password</th>
@@ -563,6 +566,16 @@ export default function AdminDashboard() {
                                                 <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 text-[#2856C3] rounded text-[11px]">
                                                     {record.role}
                                                 </span>
+                                            </td>
+
+                                            {/* Contact Email */}
+                                            <td className="py-3.5 px-4 text-xs">
+                                                <div className="font-mono text-slate-800 break-all max-w-[180px]">
+                                                    {record.contactEmail || '—'}
+                                                </div>
+                                                <div className="text-[10px] text-slate-500 mt-0.5">
+                                                    {record.phone || '—'}
+                                                </div>
                                             </td>
 
                                             {/* Status (inline dropdown) */}
@@ -844,9 +857,16 @@ export default function AdminDashboard() {
                                     </div>
 
                                     <div>
-                                        <span className="text-slate-500 block uppercase tracking-wider text-[10px] font-bold">Email</span>
+                                        <span className="text-slate-500 block uppercase tracking-wider text-[10px] font-bold">Institutional Email</span>
                                         <span className="text-slate-800 font-mono text-xs block">
                                             {selectedSubmission.email || '—'}
+                                        </span>
+                                    </div>
+
+                                    <div>
+                                        <span className="text-slate-500 block uppercase tracking-wider text-[10px] font-bold">Contact Email</span>
+                                        <span className="text-slate-800 font-mono text-xs block">
+                                            {selectedSubmission.contactEmail || '—'}
                                         </span>
                                     </div>
 

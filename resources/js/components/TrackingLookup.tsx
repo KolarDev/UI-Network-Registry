@@ -12,6 +12,7 @@ export interface TrackedRegistration {
     role: string;
     designation: string | null;
     phone: string;
+    contact_email: string | null;
     faculty: string | null;
     department: string | null;
     username: string;

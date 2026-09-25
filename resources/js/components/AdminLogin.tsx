@@ -5,7 +5,7 @@ interface AdminLoginProps {
 }
 
 export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
-    const [username, setUsername] = useState<string>('');
+    const [identifier, setIdentifier] = useState<string>('');
     const [password, setPassword] = useState<string>('');
     const [error, setError] = useState<string>('');
     const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -14,26 +14,31 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
         e.preventDefault();
         setError('');
 
-        if (!username.trim() || !password.trim()) {
-            setError('Please enter both username and password.');
+        if (!identifier.trim() || !password.trim()) {
+            setError('Please enter both your administrator email/username and password.');
             return;
         }
 
         setIsLoading(true);
 
         try {
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            // The API accepts either field: it resolves the identifier to the
+            // matching users column, so both are sent with the same value.
             const response = await fetch('/api/admin/login', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken,
                 },
-                body: JSON.stringify({ username, password })
+                body: JSON.stringify({ email: identifier.trim(), username: identifier.trim(), password })
             });
 
-            const result = await response.json();
+            let result: any = null;
+            try {
+                result = await response.json();
+            } catch {
+                throw new Error(`Server returned an invalid response (HTTP ${response.status}).`);
+            }
 
             if (response.ok && result.success) {
                 if (result.token) {
@@ -43,8 +48,8 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
             } else {
                 setError(result.message || 'Invalid administrative credentials. Please try again.');
             }
-        } catch (err) {
-            setError('A network error occurred. Please verify your connection and try again.');
+        } catch (err: any) {
+            setError(err?.message || 'A network error occurred. Please verify your connection and try again.');
         } finally {
             setIsLoading(false);
         }
@@ -80,10 +85,10 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
-                {/* Username */}
+                {/* Email or Username */}
                 <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-700" htmlFor="admin-username">
-                        Username
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-700" htmlFor="admin-identifier">
+                        Email or Username
                     </label>
                     <div className="relative">
                         <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
@@ -93,11 +98,12 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                         </div>
                         <input
                             type="text"
-                            id="admin-username"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
+                            id="admin-identifier"
+                            value={identifier}
+                            onChange={(e) => setIdentifier(e.target.value)}
                             disabled={isLoading}
-                            placeholder="Enter administrative username"
+                            autoComplete="username"
+                            placeholder="e.g. admin@ui.edu.ng"
                             className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-500 focus:outline-none focus:border-[#2856C3] focus:bg-white focus:ring-1 focus:ring-[#2856C3] transition-all duration-205 text-sm font-semibold"
                         />
                     </div>
@@ -120,6 +126,7 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             disabled={isLoading}
+                            autoComplete="current-password"
                             placeholder="Enter administrative password"
                             className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-500 focus:outline-none focus:border-[#2856C3] focus:bg-white focus:ring-1 focus:ring-[#2856C3] transition-all duration-205 text-sm font-semibold"
                         />

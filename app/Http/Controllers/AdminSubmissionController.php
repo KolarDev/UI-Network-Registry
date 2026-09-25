@@ -2,32 +2,21 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AuthorizesAdmin;
 use App\Models\StaffRegistration;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 
 class AdminSubmissionController extends Controller
 {
-    /**
-     * Helper to verify admin authorization via active session or bearer/query token.
-     */
-    protected function authorizeAdmin(Request $request): bool
-    {
-        if (Auth::check()) {
-            return true;
-        }
-
-        $token = $request->bearerToken() ?? $request->query('token');
-        return $token === 'mock-admin-session-token';
-    }
+    use AuthorizesAdmin;
 
     /**
      * Retrieve paginated registrations with dynamic filters.
      */
     public function index(Request $request)
     {
-        if (!$this->authorizeAdmin($request)) {
+        if (!$this->isAdmin($request)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized. Admin access required.'
@@ -64,7 +53,7 @@ class AdminSubmissionController extends Controller
      */
     public function export(Request $request)
     {
-        if (!$this->authorizeAdmin($request)) {
+        if (!$this->isAdmin($request)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized. Admin access required.'
@@ -112,6 +101,7 @@ class AdminSubmissionController extends Controller
                 'Role',
                 'Designation',
                 'Phone',
+                'Contact Email',
                 'Faculty',
                 'Department',
                 'Username',
@@ -133,6 +123,7 @@ class AdminSubmissionController extends Controller
                         $reg->role,
                         $reg->designation,
                         $reg->phone,
+                        $reg->contact_email,
                         $reg->faculty,
                         $reg->department,
                         $reg->username,
@@ -155,7 +146,7 @@ class AdminSubmissionController extends Controller
      */
     public function downloadFile(Request $request)
     {
-        if (!$this->authorizeAdmin($request)) {
+        if (!$this->isAdmin($request)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized. Admin access required.'

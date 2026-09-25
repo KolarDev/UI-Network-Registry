@@ -12,6 +12,7 @@ export interface RegistrationFormData {
     staffId: string;
     designation: 'Academic' | 'Non-Teaching' | '';
     phone: string;
+    contactEmail: string;
     faculty: string;
     department: string;
 
@@ -32,6 +33,7 @@ export interface ValidationErrors {
     staffId?: string;
     designation?: string;
     phone?: string;
+    contactEmail?: string;
     faculty?: string;
     department?: string;
     username?: string;
@@ -68,6 +70,7 @@ export default function RegistrationForm({
                 staffId: editRegistration.staff_id || '',
                 designation: (editRegistration.designation as RegistrationFormData['designation']) || '',
                 phone: editRegistration.phone || '',
+                contactEmail: editRegistration.contact_email || '',
                 faculty: editRegistration.faculty || '',
                 department: editRegistration.department || '',
                 username: editRegistration.username || '',
@@ -84,6 +87,7 @@ export default function RegistrationForm({
             staffId: '',
             designation: '',
             phone: '',
+            contactEmail: '',
             faculty: '',
             department: '',
             username: '',
@@ -198,6 +202,13 @@ export default function RegistrationForm({
         return regex.test(val.replace(/\s+/g, ''));
     };
 
+    const validateEmail = (val: string): boolean => {
+        // Mirrors the backend `email` rule: a single @, no whitespace, and a
+        // dotted domain.
+        const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return regex.test(val.trim());
+    };
+
     const getPasswordStrength = (pwd: string): { score: number; label: string; color: string } => {
         if (!pwd) return { score: 0, label: 'None', color: 'bg-slate-300' };
         let score = 0;
@@ -241,6 +252,12 @@ export default function RegistrationForm({
                 newErrors.phone = 'Phone number is required.';
             } else if (!validatePhone(formData.phone)) {
                 newErrors.phone = 'Invalid phone number. Must be a valid Nigerian number (e.g. 08031234567).';
+            }
+
+            if (!formData.contactEmail.trim()) {
+                newErrors.contactEmail = 'Contact email is required.';
+            } else if (!validateEmail(formData.contactEmail)) {
+                newErrors.contactEmail = 'Enter a valid email address (e.g. name@example.com).';
             }
 
             if (formData.role === 'staff') {
@@ -460,6 +477,7 @@ export default function RegistrationForm({
             submissionData.append('staffId', formData.staffId.trim());
             submissionData.append('designation', formData.role === 'staff' ? formData.designation : '');
             submissionData.append('phone', formData.phone.trim());
+            submissionData.append('contactEmail', formData.contactEmail.trim());
             submissionData.append('faculty', ['staff', 'dean', 'hod'].includes(formData.role) ? formData.faculty.trim() : '');
             submissionData.append('department', ['staff', 'hod', 'director'].includes(formData.role) ? formData.department.trim() : '');
             if (!isUpdate) {
@@ -537,6 +555,7 @@ export default function RegistrationForm({
                         validationErrors.staffId ||
                         validationErrors.designation ||
                         validationErrors.phone ||
+                        validationErrors.contactEmail ||
                         validationErrors.faculty ||
                         validationErrors.department
                     ) {
@@ -579,6 +598,7 @@ export default function RegistrationForm({
             staffId: '',
             designation: '',
             phone: '',
+            contactEmail: '',
             faculty: '',
             department: '',
             username: '',
@@ -954,7 +974,35 @@ export default function RegistrationForm({
                                     )}
                                 </div>
                             </div>
- 
+
+                            {/* Contact Email (Always Visible) */}
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-xs font-bold uppercase tracking-wider text-slate-500" htmlFor="contactEmail">
+                                    Contact Email <span className="text-red-500">*</span>
+                                </label>
+                                <div className="relative">
+                                    <input
+                                        type="email"
+                                        id="contactEmail"
+                                        name="contactEmail"
+                                        value={formData.contactEmail}
+                                        onChange={handleChange}
+                                        className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 transition-all duration-200 ${
+                                            errors.contactEmail
+                                                ? 'border-red-500 focus:ring-red-500/10'
+                                                : 'border-slate-200 focus:border-[#2856C3] focus:ring-[#2856C3]'
+                                        }`}
+                                        placeholder="e.g. name@example.com"
+                                    />
+                                    {errors.contactEmail && (
+                                        <span className="text-xs text-red-500 mt-1 block font-medium">{errors.contactEmail}</span>
+                                    )}
+                                </div>
+                                <span className="text-[11px] text-slate-400">
+                                    Used to reach you about this application. Your official UI email is generated from your username later.
+                                </span>
+                            </div>
+
                             {/* Faculty / Unit (For Staff, Dean, HOD) */}
                             {['staff', 'dean', 'hod'].includes(formData.role) && (
                                 <div className="flex flex-col gap-1.5 animate-fadeIn">
@@ -1513,6 +1561,10 @@ export default function RegistrationForm({
                                     <div className="flex justify-between py-1 border-b border-slate-100">
                                         <span className="text-slate-400">Phone No:</span>
                                         <span className="text-slate-800 font-semibold">{formData.phone}</span>
+                                    </div>
+                                    <div className="flex justify-between py-1 border-b border-slate-100">
+                                        <span className="text-slate-400">Contact Email:</span>
+                                        <span className="text-slate-800 font-semibold text-right max-w-[200px] truncate">{formData.contactEmail}</span>
                                     </div>
                                     {['staff', 'dean', 'hod'].includes(formData.role) && (
                                         <div className="flex justify-between py-1 border-b border-slate-100">

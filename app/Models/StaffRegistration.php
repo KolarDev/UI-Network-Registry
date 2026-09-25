@@ -33,6 +33,7 @@ class StaffRegistration extends Model
         'role',
         'designation',
         'phone',
+        'contact_email',
         'faculty',
         'department',
         'username',

@@ -220,3 +220,61 @@ The database schema and API endpoints are configured to support ITMS network pro
 - **Unhashed Preferred Password**: Saved in the `default_password_text` column on the `staff_registrations` table.
 - **Admin Visibility**: Returned as `default_password_text` and `preferred_password` in `/api/admin/submissions`.
 - **Export Utility**: Included in the downloadable CSV export (`/api/admin/submissions/export`) for bulk network provisioning.
+
+---
+
+## 7. PHP Upload Limits (required for document uploads)
+
+A registration submits two documents of up to **5MB** each, so PHP must be
+allowed to receive them. With the stock `upload_max_filesize = 2M`, PHP rejects
+a larger file *before* Laravel runs: the request looks like a missing upload, and
+the API can only answer with a server-limit message instead of validating the
+file. With a low `post_max_size`, two valid 5MB files (10MB together) are
+rejected outright with HTTP 413.
+
+Required values:
+
+```ini
+upload_max_filesize = 6M    ; headroom above the 5MB per-file limit
+post_max_size       = 16M   ; both documents plus multipart overhead
+```
+
+**Apache (mod_php):** already set in `public/.htaccess`.
+
+**php-fpm / shared hosting:** `php_value` in `.htaccess` is ignored, so set the
+values in `php.ini` or the pool config (`/etc/php/*/fpm/php.ini`), then restart
+the service.
+
+**Local development (`php artisan serve`)** uses the CLI `php.ini`, which the
+project cannot override. Either raise the limits in that `php.ini` or start the
+server with them inline:
+
+```bash
+php -d upload_max_filesize=6M -d post_max_size=16M artisan serve
+```
+
+Verify the effective values at any time:
+
+```bash
+php -r 'echo ini_get("upload_max_filesize"), " / ", ini_get("post_max_size"), PHP_EOL;'
+```
+
+---
+
+## 8. Administrator Credentials
+
+The seeder creates the administrator account used by the admin console:
+
+| Field    | Value               |
+| -------- | ------------------- |
+| Email    | `admin@ui.edu.ng`   |
+| Username | `admin`             |
+| Password | `password`          |
+
+`POST /api/admin/login` accepts either the email or the username in the `email`
+or `username` field. The seeder is idempotent (`php artisan db:seed` repairs a
+missing or renamed admin without duplicating data).
+
+On success the endpoint returns a random, session-bound API token. The token is
+only valid alongside the session it was issued to, so it cannot be reused as a
+shared password. **Change the seeded password before deploying to production.**
